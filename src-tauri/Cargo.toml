@@ -1,0 +1,22 @@
+[package]
+name = "otakunime-desktop"
+version = "0.1.0"
+description = "AniVerse Desktop & Mobile"
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+otakunime = { path = ".." }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+tauri = { version = "2.12.5", features = [] }
+tauri-plugin-log = "2"

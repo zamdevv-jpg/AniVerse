@@ -1,0 +1,46 @@
+<header class="site-header" id="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="/" aria-label="{{ site_name }} — beranda">
+      <img src="/static/js/logo.png" alt="{{ site_name }}" class="brand-logo">
+    </a>
+
+    <nav class="desktop-nav" aria-label="Navigasi utama">
+      <a href="/" class="{{ 'is-active' if active == 'home' else '' }}">Beranda</a>
+      <a href="/anime" class="{{ 'is-active' if active == 'browse' else '' }}">Katalog</a>
+      <a href="/anime?status=Ongoing&order=update">Ongoing</a>
+      <a href="/anime?type=Movie&order=update">Movie</a>
+      <a href="/jadwal" class="{{ 'is-active' if active == 'schedule' else '' }}">Jadwal</a>
+      <a href="/bookmark" class="{{ 'is-active' if active == 'bookmark' else '' }}">Bookmark</a>
+    </nav>
+
+    <form class="header-search" action="/anime" method="get" role="search" autocomplete="off">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <input type="search" name="q" id="live-search" placeholder="Cari anime, movie..." aria-label="Cari anime" value="{{ query }}">
+      <kbd aria-hidden="true">/</kbd>
+      <div class="search-dropdown" id="search-dropdown" hidden></div>
+    </form>
+
+    <div class="header-actions">
+      <a class="icon-btn desktop-only" href="/acak" title="Anime acak" aria-label="Anime acak">
+        <svg class="icon" aria-hidden="true"><use href="#i-shuffle"/></svg>
+      </a>
+      <a class="icon-btn desktop-only" href="/bookmark" title="Bookmark saya" aria-label="Bookmark saya">
+        <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+      </a>
+      <button class="icon-btn mobile-only" id="mobile-search-toggle" type="button" aria-label="Buka pencarian" aria-expanded="false">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      </button>
+      <button class="icon-btn mobile-only" id="mobile-menu-toggle" type="button" aria-label="Buka menu" aria-expanded="false">
+        <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="mobile-search-bar" id="mobile-search-bar" hidden>
+    <form action="/anime" method="get" role="search">
+      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <input type="search" name="q" placeholder="Cari anime..." aria-label="Cari anime" value="{{ query }}">
+      <button type="submit" class="btn btn-gold btn-sm">Cari</button>
+    </form>
+  </div>
+</header>

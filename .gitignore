@@ -1,0 +1,6 @@
+/target
+.env
+*.log
+*.keystore
+src-tauri/gen/android/app/signing.properties
+.DS_Store

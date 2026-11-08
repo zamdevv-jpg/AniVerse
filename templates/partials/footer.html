@@ -1,0 +1,36 @@
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <a class="brand" href="/" aria-label="{{ site_name }} — beranda">
+        <img src="/static/js/logo.png" alt="{{ site_name }}" class="brand-logo">
+      </a>
+      <p>{{ site_tagline }}</p>
+      <p class="footer-disclaimer">
+        Semua data dan video berasal dari pihak ketiga ({{ source_host }}). Situs ini tidak menyimpan
+        file video apa pun. Gunakan untuk keperluan pembelajaran dan hormati hak cipta.
+      </p>
+    </div>
+
+    <div class="footer-col">
+      <h3>Jelajahi</h3>
+      <a href="/anime?order=update">Rilisan terbaru</a>
+      <a href="/anime?status=Ongoing&order=update">Anime ongoing</a>
+      <a href="/anime?status=Completed&order=rating">Anime completed</a>
+      <a href="/anime?type=Movie&order=popular">Movie populer</a>
+      <a href="/jadwal">Jadwal rilis</a>
+    </div>
+
+    <div class="footer-col">
+      <h3>Berguna</h3>
+      <a href="/cari">Pencarian</a>
+      <a href="/bookmark">Bookmark saya</a>
+      <a href="/acak">Anime acak</a>
+      <a href="/robots.txt">Robots</a>
+    </div>
+  </div>
+
+  <div class="container footer-bottom">
+    <span>© {{ year }} {{ site_name }}. Dibuat dengan Rust + Axum.</span>
+    <span class="footer-note">Bukan afiliasi resmi {{ source_host }}.</span>
+  </div>
+</footer>

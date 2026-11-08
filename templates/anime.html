@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/">Beranda</a>
+  <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+  <a href="/anime">Katalog</a>
+  <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+  <span>{{ detail.title }}</span>
+</nav>
+
+<section class="detail-hero" style="--detail-image:url({{ (detail.banner_image if detail.banner_image else detail.image)|backdrop }})">
+  <div class="detail-backdrop" aria-hidden="true"></div>
+  <div class="detail-inner">
+    <div class="detail-poster">
+      {% if detail.image %}
+      <img src="{{ detail.image|poster }}" alt="Poster {{ detail.title }}" loading="eager" decoding="async">
+      {% else %}
+      <span class="poster-fallback">{{ detail.title|initial }}</span>
+      {% endif %}
+      <button
+        class="bookmark-fab"
+        type="button"
+        data-bookmark
+        data-slug="{{ detail.slug }}"
+        data-title="{{ detail.title }}"
+        data-image="{{ detail.image }}"
+        data-href="/anime/{{ detail.slug|urlencode }}"
+        aria-label="Simpan {{ detail.title }} ke bookmark"
+        aria-pressed="false"
+      >
+        <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+      </button>
+    </div>
+
+    <div class="detail-copy">
+      {% if detail.kind or detail.status %}
+      <div class="detail-eyebrow">
+        {% if detail.status %}<span class="chip chip-gold">{{ detail.status }}</span>{% endif %}
+        {% if detail.kind %}<span class="chip">{{ detail.kind }}</span>{% endif %}
+        {% if detail.season %}<span class="chip">{{ detail.season }}</span>{% endif %}
+        {% if detail.rating %}<span class="chip chip-rating"><svg class="icon fill" aria-hidden="true"><use href="#i-star-fill"/></svg> {{ detail.rating }}</span>{% endif %}
+      </div>
+      {% endif %}
+
+      <h1>{{ detail.title }}</h1>
+      {% if detail.alt_title %}<p class="detail-alt">{{ detail.alt_title }}</p>{% endif %}
+
+      <div class="detail-meta">
+        {% if detail.studio %}<span><svg class="icon" aria-hidden="true"><use href="#i-film"/></svg> {{ detail.studio }}</span>{% endif %}
+        {% if detail.released %}<span><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg> {{ detail.released }}</span>{% endif %}
+        {% if detail.duration %}<span><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> {{ detail.duration }}</span>{% endif %}
+        <span><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg> {{ detail.episode_count }} episode</span>
+      </div>
+
+      <div class="detail-actions">
+        {% if latest_episode %}
+        <a class="btn btn-gold btn-lg" href="{{ latest_episode.href }}">
+          <svg class="icon fill" aria-hidden="true"><use href="#i-play"/></svg>
+          Episode {{ latest_episode.number }}
+        </a>
+        {% endif %}
+        {% if first_episode and detail.episode_count > 1 %}
+        <a class="btn btn-glass btn-lg" href="{{ first_episode.href }}">Mulai episode 1</a>
+        {% endif %}
+        {% if detail.trailer %}
+        <a class="btn btn-ghost" href="{{ detail.trailer }}" target="_blank" rel="noopener noreferrer">
+          <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+          Trailer
+        </a>
+        {% endif %}
+        <button
+          class="btn btn-ghost"
+          type="button"
+          data-bookmark
+          data-slug="{{ detail.slug }}"
+          data-title="{{ detail.title }}"
+          data-image="{{ detail.image }}"
+          data-href="/anime/{{ detail.slug|urlencode }}"
+          aria-pressed="false"
+        >
+          <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+          <span class="bookmark-label">Bookmark</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="detail-lower">
+  <div class="detail-main">
+    {% if detail.synopsis %}
+    <section class="panel synopsis-panel">
+      <div class="panel-head">
+        <h2>Sinopsis</h2>
+        <button class="text-btn" id="synopsis-toggle" type="button" hidden>Selengkapnya</button>
+      </div>
+      <div class="synopsis-text" id="synopsis-text">{{ detail.synopsis }}</div>
+    </section>
+    {% endif %}
+
+    <section class="panel episodes-panel" id="episodes">
+      <div class="panel-head">
+        <h2>Daftar episode <span class="count-badge">{{ detail.episode_count }}</span></h2>
+        {% if detail.episodes|length > 1 %}
+        <button class="text-btn" id="episode-sort" type="button" data-order="desc">
+          <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>
+          <span>Terbaru dulu</span>
+        </button>
+        {% endif %}
+      </div>
+
+      {% if detail.episodes|length > 1 %}
+      <div class="episode-search">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input type="search" id="episode-filter" placeholder="Cari nomor atau judul episode..." aria-label="Cari episode">
+      </div>
+      {% endif %}
+
+      {% if detail.episodes|length > 0 %}
+      <div class="episode-list" id="episode-list">
+        {% for episode in detail.episodes %}
+        <a
+          class="episode-row"
+          href="{{ episode.href }}"
+          data-search="{{ episode.number }} {{ episode.title|lower }}"
+        >
+          <span class="episode-num">{{ episode.number }}</span>
+          <span class="episode-info">
+            <strong>{{ episode.title }}</strong>
+            {% if episode.date %}<span>{{ episode.date }}</span>{% endif %}
+          </span>
+          <span class="episode-play" aria-hidden="true">
+            <svg class="icon fill"><use href="#i-play"/></svg>
+          </span>
+        </a>
+        {% endfor %}
+      </div>
+      <div class="episode-empty" id="episode-empty" hidden>
+        <p>Tidak ada episode yang cocok.</p>
+      </div>
+      {% else %}
+      <div class="empty-state compact">
+        <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg></span>
+        <h3>Belum ada episode</h3>
+        <p>Sumber belum menyediakan daftar episode untuk judul ini.</p>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="detail-aside">
+    <section class="panel info-panel">
+      <div class="panel-head"><h2>Informasi</h2></div>
+      <dl class="info-list">
+        {% for fact in detail.facts %}
+        <div>
+          <dt>{{ fact.label }}</dt>
+          <dd>{{ fact.value }}</dd>
+        </div>
+        {% endfor %}
+        <div>
+          <dt>Total episode</dt>
+          <dd>{{ detail.episode_count }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="panel source-panel">
+      <div class="panel-head"><h2>Sumber data</h2></div>
+      <p>Data diambil dari {{ source_host }}. AniVerse tidak menyimpan file video.</p>
+      <a class="btn btn-ghost btn-sm" href="/anime?status={{ detail.status|urlencode }}">Anime {{ detail.status }}</a>
+    </section>
+  </aside>
+</div>
+{% endblock %}

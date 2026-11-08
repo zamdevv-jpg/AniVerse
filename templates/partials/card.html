@@ -1,0 +1,66 @@
+{% macro poster_card(card) %}
+<a class="poster-card" href="{{ card.href }}" title="{{ card.title }}">
+  <div class="poster">
+    {% if card.image %}
+      <img class="lazy-hd-cover" src="{{ card.image }}" alt="{{ card.title }}" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}" data-hd-title="{{ card.title }}">
+    {% else %}
+      <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
+    {% endif %}
+    <span class="poster-shade" aria-hidden="true"></span>
+    {% if card.kind_label %}<span class="badge badge-type">{{ card.kind_label }}</span>{% endif %}
+    {% if card.status %}<span class="badge badge-status{{ ' is-live' if card.status == 'Ongoing' else '' }}">{{ card.status }}</span>{% endif %}
+    {% if card.episode %}<span class="badge badge-ep">{{ card.episode }}</span>{% endif %}
+    <span class="poster-play" aria-hidden="true">
+      <svg class="icon fill"><use href="#i-play"/></svg>
+    </span>
+  </div>
+  <div class="poster-body">
+    <h3 class="poster-title">{{ card.title }}</h3>
+    <div class="poster-meta">
+      {% if card.episode %}<span>{{ card.episode }}</span>{% endif %}
+      {% if card.status %}<span>{{ card.status }}</span>{% elif card.kind_label %}<span>{{ card.kind_label }}</span>{% endif %}
+      {% if card.provider %}<span>{{ card.provider }}</span>{% endif %}
+    </div>
+  </div>
+</a>
+{% endmacro %}
+
+{% macro rank_card(card) %}
+<a class="rank-card" href="{{ card.href }}" title="{{ card.title }}">
+  <span class="rank-number">{{ card.rank }}</span>
+  <span class="rank-poster">
+    {% if card.image %}
+      <img class="lazy-hd-cover" src="{{ card.image }}" alt="{{ card.title }}" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}" data-hd-title="{{ card.title }}">
+    {% else %}
+      <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
+    {% endif %}
+  </span>
+  <span class="rank-body">
+    <strong>{{ card.title }}</strong>
+    <span>{% if card.status %}{{ card.status }}{% elif card.episode %}{{ card.episode }}{% else %}Anime{% endif %}</span>
+  </span>
+  <span class="rank-arrow" aria-hidden="true">
+    <svg class="icon"><use href="#i-chevron-right"/></svg>
+  </span>
+</a>
+{% endmacro %}
+
+{% macro schedule_card(card) %}
+<a class="schedule-card" href="{{ card.href }}" title="{{ card.title }}">
+  <span class="schedule-time">
+    <svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>
+    {{ card.time }}
+  </span>
+  <span class="schedule-poster">
+    {% if card.image %}
+      <img class="lazy-hd-cover" src="{{ card.image }}" alt="{{ card.title }}" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}" data-hd-title="{{ card.title }}">
+    {% else %}
+      <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
+    {% endif %}
+  </span>
+  <span class="schedule-body">
+    <strong>{{ card.title }}</strong>
+    <span>{% if card.total %}Total {{ card.total }} episode{% else %}Anime{% endif %}</span>
+  </span>
+</a>
+{% endmacro %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "partials/card.html" import schedule_card %}
+
+{% block content %}
+<section class="page-hero page-hero-schedule">
+  <div class="page-hero-copy">
+    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg> Jadwal mingguan</span>
+    <h1>Rilis anime minggu ini</h1>
+    <p>Jadwal ini perkiraan berdasarkan pembaruan pekan lalu. Waktu bisa maju atau mundur sedikit. Zona waktu mengikuti WIB.</p>
+  </div>
+  <div class="page-hero-orbit" aria-hidden="true">
+    <span class="orbit-ring"></span>
+    <span class="orbit-day">WIB</span>
+  </div>
+</section>
+
+{% if days|length > 0 %}
+<nav class="day-nav" aria-label="Pilih hari">
+  {% for day in days %}
+  <a class="day-pill{{ ' is-today' if day.is_today else '' }}" href="#hari-{{ day.id }}">
+    {{ day.day }}
+    {% if day.is_today %}<span class="dot-live"></span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
+
+{% for day in days %}
+<section class="schedule-day{{ ' is-today' if day.is_today else '' }}" id="hari-{{ day.id }}">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">
+        {% if day.is_today %}Hari ini{% else %}Jadwal{% endif %}
+      </span>
+      <h2>{{ day.day }}{% if day.is_today %} <span class="badge-today">Hari ini</span>{% endif %}</h2>
+    </div>
+    <span class="pill">{{ day.entries|length }} anime</span>
+  </div>
+
+  {% if day.entries|length > 0 %}
+  <div class="schedule-grid">
+    {% for card in day.entries %}{{ schedule_card(card) }}{% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state compact">
+    <p>Tidak ada jadwal rilis untuk hari ini.</p>
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+{% else %}
+<div class="empty-state">
+  <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span>
+  <h3>Jadwal belum tersedia</h3>
+  <p>Sumber sedang tidak mengirimkan jadwal. Coba lagi beberapa saat lagi.</p>
+  <a class="btn btn-gold" href="/jadwal">Muat ulang</a>
+</div>
+{% endif %}
+{% endblock %}

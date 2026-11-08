@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "partials/card.html" import poster_card %}
+
+{% block content %}
+<section class="search-hero">
+  <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> Pencarian</span>
+  <h1>Cari anime apa hari ini?</h1>
+  <p>Ketik judul, potongan judul, atau kata kunci. Pencarian langsung terhubung ke {{ source_host }}.</p>
+
+  <form class="search-hero-form" action="/cari" method="get" role="search" autocomplete="off">
+    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+    <input type="search" name="q" value="{{ query }}" placeholder="Contoh: one piece, jujutsu, romance..." aria-label="Cari anime" autofocus>
+    <button class="btn btn-gold" type="submit">Cari</button>
+  </form>
+</section>
+
+{% if has_query %}
+<section class="section section-first">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Hasil pencarian</span>
+      <h2>“{{ query }}”</h2>
+    </div>
+    <span class="pill">{{ result_count }} judul</span>
+  </div>
+
+  {% if results|length > 0 %}
+  <div class="poster-grid">
+    {% for card in results %}{{ poster_card(card) }}{% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
+    <h3>Tidak ditemukan</h3>
+    <p>Coba ejaan lain, gunakan judul Jepang, atau cari lebih singkat.</p>
+    <a class="btn btn-gold" href="/anime">Jelajahi katalog</a>
+  </div>
+  {% endif %}
+</section>
+{% else %}
+{% if recommended|length > 0 %}
+<section class="section section-first">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow"><svg class="icon fill" aria-hidden="true"><use href="#i-flame"/></svg> Lagi ramai</span>
+      <h2>Rilisan terbaru</h2>
+    </div>
+    <a class="see-all" href="/anime?order=update">Lihat semua <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+  </div>
+  <div class="poster-grid">
+    {% for card in recommended %}{{ poster_card(card) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

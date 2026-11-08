@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% from "partials/card.html" import poster_card %}
+
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <a href="/">Beranda</a>
+  <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+  <a href="/anime">Katalog</a>
+  <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+  {% if series %}<a href="/anime/{{ series.slug|urlencode }}">{{ series.title }}</a>{% else %}<span>{{ episode.series_title }}</span>{% endif %}
+  <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+  <span>Episode {{ episode.episode_number }}</span>
+</nav>
+
+<div class="watch-layout">
+  <div class="watch-main">
+    <div class="player-card">
+      <div class="player-frame">
+        {% if episode.embed_url %}
+        <iframe
+          id="video-player"
+          src="{{ episode.embed_url }}"
+          title="{{ episode.title }}"
+          loading="lazy"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowfullscreen
+          playsinline
+          webkit-playsinline
+          referrerpolicy="no-referrer-when-downgrade"
+        ></iframe>
+        {% else %}
+        <div class="player-empty">
+          <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg></span>
+          <h2>Video belum tersedia</h2>
+          <p>Sumber tidak mengirimkan tautan pemutar untuk episode ini.</p>
+          <a class="btn btn-gold" href="{{ episode.source_url }}" target="_blank" rel="noopener noreferrer">
+            Buka halaman sumber
+            <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+          </a>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="player-footer">
+        <div class="player-heading">
+          <span class="live-dot" aria-hidden="true"></span>
+          <div>
+            <strong>{{ episode.series_title }}</strong>
+            <span>
+              Episode {{ episode.episode_number }}
+              {% if episode.released %} · {{ episode.released }}{% endif %}
+              {% if episode.kind %} · {{ episode.kind }}{% endif %}
+            </span>
+          </div>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="{{ episode.source_url }}" target="_blank" rel="noopener noreferrer">
+          <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+          Sumber
+        </a>
+      </div>
+    </div>
+
+    {% if episode.servers|length > 0 %}
+    <div class="server-bar">
+      <span class="server-label">
+        <svg class="icon" aria-hidden="true"><use href="#i-server"/></svg>
+        Server
+      </span>
+      <div class="server-list">
+        {% for server in episode.servers %}
+        <button
+          class="server-btn{{ ' is-active' if loop.first else '' }}"
+          type="button"
+          data-src="{{ server.src }}"
+          aria-pressed="{{ 'true' if loop.first else 'false' }}"
+        >
+          {{ server.name }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="episode-nav">
+      {% if prev_url %}
+      <a class="ep-nav-btn" href="{{ prev_url }}">
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+        <span><small>Sebelumnya</small>Episode sebelumnya</span>
+      </a>
+      {% else %}
+      <span class="ep-nav-btn is-disabled">
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+        <span><small>Sebelumnya</small>Tidak ada</span>
+      </span>
+      {% endif %}
+
+      {% if series %}
+      <a class="ep-nav-btn ep-nav-all" href="/anime/{{ series.slug|urlencode }}#episodes">
+        <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>
+        <span><small>Semua</small>Daftar episode</span>
+      </a>
+      {% endif %}
+
+      {% if next_url %}
+      <a class="ep-nav-btn ep-nav-next" href="{{ next_url }}">
+        <span><small>Berikutnya</small>Episode selanjutnya</span>
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+      </a>
+      {% else %}
+      <span class="ep-nav-btn is-disabled">
+        <span><small>Berikutnya</small>Tidak ada</span>
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+      </span>
+      {% endif %}
+    </div>
+
+    <div class="watch-head">
+      <div>
+        <span class="eyebrow"><svg class="icon fill" aria-hidden="true"><use href="#i-play"/></svg> Sedang ditonton</span>
+        <h1>{{ episode.title }}</h1>
+        <div class="watch-meta">
+          {% if episode.episode_number %}<span class="chip chip-gold">Episode {{ episode.episode_number }}</span>{% endif %}
+          <span class="chip">Sub Indo</span>
+          {% if episode.kind %}<span class="chip">{{ episode.kind }}</span>{% endif %}
+          {% if episode.released %}<span class="chip">{{ episode.released }}</span>{% endif %}
+        </div>
+      </div>
+      {% if series %}
+      <a class="btn btn-glass" href="/anime/{{ series.slug|urlencode }}">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+        Detail seri
+      </a>
+      {% endif %}
+    </div>
+
+    {% if episode.downloads|length > 0 %}
+    <section class="panel downloads-panel">
+      <div class="panel-head">
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> Unduhan</h2>
+        <span class="pill">{{ episode.downloads|length }} tautan</span>
+      </div>
+      <div class="download-list">
+        {% for download in episode.downloads %}
+        <div class="download-row">
+          <span class="download-server">{{ download.server }}</span>
+          {% if download.quality %}<span class="download-quality">{{ download.quality }}</span>{% endif %}
+          <a class="download-link" href="{{ download.url }}" target="_blank" rel="noopener noreferrer nofollow">
+            Download
+            <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="watch-aside">
+    <section class="panel series-panel">
+      {% if series %}
+      <a class="series-mini" href="/anime/{{ series.slug|urlencode }}">
+        <span class="series-mini-poster">
+          {% if series.image %}<img src="{{ series.image|poster }}" alt="{{ series.title }}" loading="lazy">{% endif %}
+        </span>
+        <span class="series-mini-body">
+          <strong>{{ series.title }}</strong>
+          <span>{% if series.status %}{{ series.status }}{% endif %}{% if series.kind %} · {{ series.kind }}{% endif %}</span>
+          <span>{{ series.episode_count }} episode</span>
+        </span>
+      </a>
+      {% else %}
+      <div class="series-mini">
+        <span class="series-mini-poster">
+          {% if episode.series_image %}<img src="{{ episode.series_image|poster }}" alt="{{ episode.series_title }}" loading="lazy">{% endif %}
+        </span>
+        <span class="series-mini-body">
+          <strong>{{ episode.series_title }}</strong>
+          <span>Episode {{ episode.episode_number }}</span>
+        </span>
+      </div>
+      {% endif %}
+    </section>
+
+    {% if series and series.episodes|length > 0 %}
+    <section class="panel aside-episodes">
+      <div class="panel-head">
+        <h2>Episode</h2>
+        <span class="pill">{{ series.episodes|length }}</span>
+      </div>
+      <div class="aside-ep-list">
+        {% for item in series.episodes %}
+        <a class="aside-ep{{ ' is-current' if item.slug == episode.slug else '' }}" href="{{ item.href }}">
+          <span class="aside-ep-num">{{ item.number }}</span>
+          <span class="aside-ep-title">{{ item.title }}</span>
+          {% if item.slug == episode.slug %}
+          <span class="playing-bars" aria-label="Sedang diputar"><i></i><i></i><i></i></span>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="panel tip-panel">
+      <div class="panel-head"><h2>Tips</h2></div>
+      <p>Jika video tidak muncul, coba server lain atau buka halaman sumber. Beberapa host memblokir iframe.</p>
+    </section>
+  </aside>
+</div>
+
+{% if episode.recommended|length > 0 %}
+<section class="section">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg> Mungkin kamu suka</span>
+      <h2>Rekomendasi seri</h2>
+    </div>
+    <a class="see-all" href="/anime?order=popular">Lihat semua <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+  </div>
+  <div class="poster-grid">
+    {% for card in episode.recommended %}{{ poster_card(card) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div
+  id="watch-history"
+  hidden
+  data-slug="{{ episode.slug }}"
+  data-title="{{ episode.series_title }}"
+  data-image="{{ episode.series_image }}"
+  data-episode="{{ episode.episode_number }}"
+  data-href="/watch/{{ episode.slug|urlencode }}"
+></div>
+{% endblock %}

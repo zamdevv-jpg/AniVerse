@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% from "partials/card.html" import poster_card %}
+
+{% block content %}
+<section class="page-hero">
+  <div class="page-hero-copy">
+    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg> Katalog anime</span>
+    <h1>{% if is_search %}Hasil untuk “{{ params.q }}”{% else %}Temukan tontonan berikutnya{% endif %}</h1>
+    <p>
+      {% if is_search %}
+        Menampilkan hasil pencarian dari {{ source_host }}. Gunakan filter untuk mempersempit pilihan.
+      {% else %}
+        Filter berdasarkan status, tipe, dan urutan. Semua data diambil langsung dari {{ source_host }}.
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-hero-stats">
+    <div class="stat">
+      <strong>{{ cards|length }}</strong>
+      <span>judul di halaman ini</span>
+    </div>
+  </div>
+</section>
+
+<div class="quick-pills" role="navigation" aria-label="Filter cepat">
+  <a class="pill-link{{ ' is-active' if params.status == '' and params.kind == '' }}" href="/anime">Semua</a>
+  <a class="pill-link{{ ' is-active' if params.status == 'Ongoing' }}" href="/anime?status=Ongoing&order=update">Ongoing</a>
+  <a class="pill-link{{ ' is-active' if params.status == 'Completed' }}" href="/anime?status=Completed&order=update">Completed</a>
+  <a class="pill-link{{ ' is-active' if params.kind == 'Movie' }}" href="/anime?type=Movie&order=popular">Movie</a>
+  <a class="pill-link{{ ' is-active' if params.order == 'popular' }}" href="/anime?order=popular">Populer</a>
+  <a class="pill-link{{ ' is-active' if params.order == 'rating' }}" href="/anime?order=rating">Rating tertinggi</a>
+</div>
+
+<form class="browse-filters" action="/anime" method="get">
+  <div class="filter-search">
+    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+    <input type="search" name="q" value="{{ params.q }}" placeholder="Cari judul anime..." aria-label="Cari judul anime">
+    <button class="btn btn-gold" type="submit">Cari</button>
+  </div>
+
+  <div class="filter-row">
+    <label class="select-wrap">
+      <span>Status</span>
+      <select name="status">
+        <option value="">Semua status</option>
+        <option value="Ongoing"{{ ' selected' if params.status == 'Ongoing' else '' }}>Ongoing</option>
+        <option value="Completed"{{ ' selected' if params.status == 'Completed' else '' }}>Completed</option>
+        <option value="Upcoming"{{ ' selected' if params.status == 'Upcoming' else '' }}>Upcoming</option>
+      </select>
+    </label>
+
+    <label class="select-wrap">
+      <span>Tipe</span>
+      <select name="type">
+        <option value="">Semua tipe</option>
+        <option value="Anime"{{ ' selected' if params.kind == 'Anime' else '' }}>Anime</option>
+        <option value="Movie"{{ ' selected' if params.kind == 'Movie' else '' }}>Movie</option>
+        <option value="TV Show"{{ ' selected' if params.kind == 'TV Show' else '' }}>TV Show</option>
+        <option value="Special"{{ ' selected' if params.kind == 'Special' else '' }}>Special</option>
+        <option value="Drama"{{ ' selected' if params.kind == 'Drama' else '' }}>Drama</option>
+      </select>
+    </label>
+
+    <label class="select-wrap">
+      <span>Urutkan</span>
+      <select name="order">
+        <option value="">Default</option>
+        <option value="update"{{ ' selected' if params.order == 'update' else '' }}>Update terbaru</option>
+        <option value="popular"{{ ' selected' if params.order == 'popular' else '' }}>Paling populer</option>
+        <option value="rating"{{ ' selected' if params.order == 'rating' else '' }}>Rating tertinggi</option>
+        <option value="latest"{{ ' selected' if params.order == 'latest' else '' }}>Baru ditambahkan</option>
+        <option value="title"{{ ' selected' if params.order == 'title' else '' }}>Judul A–Z</option>
+        <option value="titlereverse"{{ ' selected' if params.order == 'titlereverse' else '' }}>Judul Z–A</option>
+      </select>
+    </label>
+
+    <label class="select-wrap">
+      <span>Sumber</span>
+      <select name="provider">
+        <option value=""{{ ' selected' if params.provider == '' else '' }}>Semua (Gabungan)</option>
+        <option value="otakudesu"{{ ' selected' if params.provider == 'otakudesu' else '' }}>Otakudesu</option>
+        <option value="nimegami"{{ ' selected' if params.provider == 'nimegami' else '' }}>Nimegami</option>
+      </select>
+    </label>
+
+    <button class="btn btn-gold filter-apply" type="submit">Terapkan</button>
+    <a class="btn btn-ghost filter-reset" href="/anime">Reset</a>
+  </div>
+</form>
+
+<section class="section section-first">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">
+        {% if is_search %}Pencarian{% else %}Hasil filter{% endif %}
+      </span>
+      <h2>
+        {% if is_search %}
+          “{{ params.q }}”
+        {% elif params.status %}
+          Anime {{ params.status }}
+        {% elif params.kind %}
+          {{ params.kind }}
+        {% else %}
+          Semua anime
+        {% endif %}
+      </h2>
+    </div>
+    <span class="pill">{{ cards|length }} judul</span>
+  </div>
+
+  {% if cards|length > 0 %}
+  <div class="poster-grid">
+    {% for card in cards %}{{ poster_card(card) }}{% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
+    <h3>Tidak ada hasil</h3>
+    <p>Coba kata kunci lain, sesuaikan filter, atau lihat seluruh katalog.</p>
+    <a class="btn btn-gold" href="/anime">Lihat semua anime</a>
+  </div>
+  {% endif %}
+
+  {% if page > 1 or has_next %}
+  <nav class="pagination" aria-label="Navigasi halaman">
+    {% if page > 1 %}
+    <a class="page-btn" href="{{ prev_url }}">
+      <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+      Sebelumnya
+    </a>
+    {% else %}
+    <span class="page-btn is-disabled">Sebelumnya</span>
+    {% endif %}
+    <span class="page-now">Halaman <b>{{ page }}</b></span>
+    {% if has_next %}
+    <a class="page-btn" href="{{ next_url }}">
+      Berikutnya
+      <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+    </a>
+    {% else %}
+    <span class="page-btn is-disabled">Berikutnya</span>
+    {% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endblock %}

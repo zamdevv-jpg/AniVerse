@@ -1,0 +1,22 @@
+<nav class="mobile-nav" aria-label="Navigasi bawah">
+  <a href="/" class="{{ 'is-active' if active == 'home' else '' }}">
+    <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
+    <span>Beranda</span>
+  </a>
+  <a href="/anime" class="{{ 'is-active' if active == 'browse' else '' }}">
+    <svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>
+    <span>Katalog</span>
+  </a>
+  <a href="/jadwal" class="{{ 'is-active' if active == 'schedule' else '' }}">
+    <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
+    <span>Jadwal</span>
+  </a>
+  <a href="/cari" class="{{ 'is-active' if active == 'search' else '' }}">
+    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+    <span>Cari</span>
+  </a>
+  <a href="/bookmark" class="{{ 'is-active' if active == 'bookmark' else '' }}">
+    <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+    <span>Bookmark</span>
+  </a>
+</nav>
