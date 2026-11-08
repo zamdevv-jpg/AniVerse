@@ -206,14 +206,40 @@ impl NimegamiSource {
                                 match response.text().await {
                                     Ok(body) => {
                                         let (series, _) = parse_json_ld(&body);
-                                        Some(!series
-                                            .and_then(|value| {
-                                                value
-                                                    .get("name")
-                                                    .and_then(Value::as_str)
-                                                    .map(|name| !name.trim().is_empty())
+                                        Some(series.map_or(true, |series| {
+                                            let title = series
+                                                .get("name")
+                                                .and_then(Value::as_str)
+                                                .unwrap_or_default()
+                                                .trim()
+                                                .to_string();
+                                            if title.is_empty() {
+                                                return true;
+                                            }
+                                            let mut genres = series
+                                                .get("genre")
+                                                .and_then(Value::as_array)
+                                                .map(|items| {
+                                                    items
+                                                        .iter()
+                                                        .filter_map(Value::as_str)
+                                                        .map(str::to_string)
+                                                        .collect::<Vec<_>>()
+                                                })
+                                                .unwrap_or_default();
+                                            if let Some(rating) = series
+                                                .get("contentRating")
+                                                .and_then(Value::as_str)
+                                            {
+                                                genres.push(rating.to_string());
+                                            }
+                                            is_adult_card(&Card {
+                                                title,
+                                                slug: format!("ng-{slug}"),
+                                                genres,
+                                                ..Default::default()
                                             })
-                                            .unwrap_or(false))
+                                        }))
                                     }
                                     Err(_) => None,
                                 }
@@ -373,7 +399,18 @@ impl NimegamiSource {
             })
             .unwrap_or_default();
 
-        if raw_genres.iter().any(|g| is_adult_genre(g)) {
+        if raw_genres.iter().any(|g| is_adult_genre(g))
+            || series
+                .get("contentRating")
+                .and_then(Value::as_str)
+                .is_some_and(is_adult_genre)
+            || is_adult_card(&Card {
+                title: title.clone(),
+                slug: clean_slug.to_string(),
+                genres: raw_genres.clone(),
+                ..Default::default()
+            })
+        {
             return Err(anyhow!(
                 "Anime diblokir karena mengandung genre 18+ / dewasa"
             ));
@@ -800,7 +837,7 @@ fn parse_json_ld(html: &str) -> (Option<Value>, Vec<Value>) {
             if item_types.iter().any(|kind| {
                 matches!(
                     kind.to_ascii_lowercase().as_str(),
-                    "tvseries" | "tvshow" | "movie" | "anime" | "creativework"
+                    "tvseries" | "tvseason" | "tvshow" | "movie" | "anime" | "creativework"
                 )
             }) {
                 if series_opt.is_none() {

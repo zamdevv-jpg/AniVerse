@@ -16,8 +16,9 @@ use crate::{
     models::{
         AnimeDetail, BrowsePage, BrowseParams, Card, DownloadLink, EpisodeDetail, EpisodeLink,
         Genre, HomeData, InfoItem, ScheduleDay, VideoServer, deduplicate_cards, encode,
-        is_adult_card, is_adult_genre,
+        is_adult_card, is_adult_genre, normalize_title_for_dedup,
     },
+    doronime::DoronimeSource,
     nimegami::NimegamiSource,
 };
 
@@ -32,6 +33,7 @@ pub struct Source {
     client: reqwest::Client,
     cache: Cache,
     pub nimegami: NimegamiSource,
+    pub doronime: DoronimeSource,
 }
 
 impl Source {
@@ -81,12 +83,16 @@ impl Source {
         let nimegami_base_url = std::env::var("NIMEGAMI_BASE_URL")
             .unwrap_or_else(|_| "https://nimegami.id".to_string());
         let nimegami = NimegamiSource::new(nimegami_base_url)?;
+        let doronime_base_url = std::env::var("DORONIME_BASE_URL")
+            .unwrap_or_else(|_| "https://doronime.id".to_string());
+        let doronime = DoronimeSource::new(doronime_base_url)?;
 
         Ok(Self {
             base_url,
             client,
             cache: Cache::default(),
             nimegami,
+            doronime,
         })
     }
 
@@ -179,6 +185,56 @@ impl Source {
         }
 
         Err(last_error.unwrap_or_else(|| anyhow!("permintaan ke sumber gagal")))
+    }
+
+    async fn mal_schedule_html(&self) -> Result<String> {
+        const KEY: &str = "https://myanimelist.net/anime/season/schedule";
+        const TTL: StdDuration = StdDuration::from_secs(1800);
+
+        if let Some(body) = self.cache.fresh(KEY) {
+            return Ok(body);
+        }
+
+        let mut last_error = None;
+        for attempt in 0..2 {
+            if attempt > 0 {
+                tokio::time::sleep(StdDuration::from_millis(700)).await;
+            }
+            match self
+                .client
+                .get(KEY)
+                .header(reqwest::header::REFERER, "https://myanimelist.net/")
+                .send()
+                .await
+            {
+                Ok(response) if response.status().is_success() => match response.text().await {
+                    Ok(body) if !body.trim().is_empty() && !is_challenge(&body) => {
+                        self.cache.put(KEY.to_string(), body.clone(), TTL);
+                        return Ok(body);
+                    }
+                    Ok(_) => last_error = Some(anyhow!("halaman jadwal MyAnimeList kosong atau meminta verifikasi")),
+                    Err(error) => last_error = Some(anyhow!("gagal membaca jadwal MyAnimeList: {error}")),
+                },
+                Ok(response) => {
+                    let status = response.status();
+                    last_error = Some(anyhow!("MyAnimeList mengembalikan HTTP {status}"));
+                    if !matches!(status.as_u16(), 403 | 429 | 500 | 502 | 503 | 504) {
+                        break;
+                    }
+                }
+                Err(error) => last_error = Some(anyhow!("tidak bisa menghubungi MyAnimeList: {error}")),
+            }
+        }
+
+        if let Some(stale) = self.cache.stale(KEY) {
+            if let Some(error) = &last_error {
+                tracing::warn!(%error, "MyAnimeList gagal; memakai jadwal cache lama");
+            } else {
+                tracing::warn!("MyAnimeList gagal; memakai jadwal cache lama");
+            }
+            return Ok(stale);
+        }
+        Err(last_error.unwrap_or_else(|| anyhow!("permintaan jadwal MyAnimeList gagal")))
     }
 
     pub async fn home(&self) -> Result<HomeData> {
@@ -282,6 +338,9 @@ impl Source {
     pub async fn browse(&self, params: &BrowseParams) -> Result<BrowsePage> {
         if params.provider == "nimegami" {
             return self.nimegami.browse(params).await;
+        }
+        if params.provider == "doronime" {
+            return self.doronime.browse(params).await;
         }
 
         let nimegami_result = if params.provider.is_empty() {
@@ -387,6 +446,9 @@ impl Source {
     }
 
     pub async fn detail(&self, slug: &str) -> Result<AnimeDetail> {
+        if slug.starts_with("dn-") {
+            return self.doronime.detail(slug).await;
+        }
         if slug.starts_with("ng-") || slug.starts_with("nimegami:") {
             return self.nimegami.detail(slug).await;
         }
@@ -575,6 +637,24 @@ impl Source {
             return Err(anyhow!(
                 "Anime diblokir karena mengandung konten 18+ / dewasa."
             ));
+        }
+
+        // Kartu Otakudesu tetap dapat dipakai untuk judul yang tidak ada di Nimegami.
+        // Jika Nimegami punya judul yang sama, jadikan detail dan episode Nimegami sebagai utama.
+        let normalized_title = normalize_title_for_dedup(&title);
+        for candidate in [&title, &alt_title] {
+            if candidate.trim().chars().count() < 2 {
+                continue;
+            }
+            let cards = self.nimegami.search(candidate, 10).await.unwrap_or_default();
+            let matched = cards.into_iter().find(|card| {
+                normalize_title_for_dedup(&card.title) == normalized_title
+            });
+            if let Some(card) = matched
+                && let Ok(detail) = self.nimegami.detail(&card.slug).await
+            {
+                return Ok(detail);
+            }
         }
 
         Ok(AnimeDetail {
@@ -798,55 +878,9 @@ impl Source {
     }
 
     pub async fn schedule(&self) -> Result<Vec<ScheduleDay>> {
-        let html = self
-            .html("/jadwal-rilis/", StdDuration::from_secs(1800))
-            .await?;
+        let html = self.mal_schedule_html().await?;
         let document = Html::parse_document(&html);
-
-        let today = current_weekday_en();
-        let mut days = Vec::new();
-
-        for section in document.select(&sel(".schedulepage")) {
-            let day = first_text_el(section, ".releases h3");
-            if day.is_empty() {
-                continue;
-            }
-            let (day_id, day_name) = indonesian_day(&day);
-            let is_today = day.eq_ignore_ascii_case(today);
-
-            let mut items = Vec::new();
-            for bsx in section.select(&sel(".bsx")) {
-                let Some(card) = parse_card(bsx, &self.base_url) else {
-                    continue;
-                };
-                items.push(Card {
-                    episode: String::new(),
-                    time: first_text_el(bsx, ".bt .epx"),
-                    // `.sb` pada jadwal berisi penanda subtitle, bukan jumlah episode.
-                    total: String::new(),
-                    ..card
-                });
-            }
-
-            days.push(ScheduleDay {
-                day: day_name,
-                id: day_id,
-                is_today,
-                entries: items,
-            });
-        }
-
-        let order = [
-            "senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu",
-        ];
-        days.sort_by_key(|day| {
-            order
-                .iter()
-                .position(|id| *id == day.id)
-                .unwrap_or(99)
-        });
-
-        Ok(days)
+        Ok(parse_mal_schedule(&document))
     }
 
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<Card>> {
@@ -1295,6 +1329,104 @@ fn current_weekday_en() -> &'static str {
         Weekday::Sat => "Saturday",
         Weekday::Sun => "Sunday",
     }
+}
+
+fn parse_mal_schedule(document: &Html) -> Vec<ScheduleDay> {
+    // MAL marks the two explicit genre filters on its schedule page with these IDs:
+    // 12 = Hentai and 49 = Erotica. Missing genre metadata is excluded as a safe default.
+    const BLOCKED_GENRE_IDS: [&str; 2] = ["12", "49"];
+    let today = current_weekday_en();
+    let mut days = Vec::new();
+
+    for section in document.select(&sel(".js-seasonal-anime-list")) {
+        let day = first_text_el(section, ".anime-header");
+        let (day_id, day_name) = indonesian_day(&day);
+        if !matches!(day_id.as_str(), "senin" | "selasa" | "rabu" | "kamis" | "jumat" | "sabtu" | "minggu") {
+            continue;
+        }
+
+        let mut entries = Vec::new();
+        let mut seen = HashSet::new();
+        for entry in section.select(&sel(".js-seasonal-anime")) {
+            let genre_ids = attr(entry, "data-genre");
+            let ids = genre_ids.split(',').map(str::trim).collect::<Vec<_>>();
+            let classes = attr(entry, "class").to_lowercase();
+            if ids.is_empty()
+                || genre_ids.trim().is_empty()
+                || ids.iter().any(|id| BLOCKED_GENRE_IDS.contains(id))
+                || classes.split_whitespace().any(|class| class == "r18")
+            {
+                continue;
+            }
+
+            let anchor = entry
+                .select(&sel(".h2_anime_title a.link-title"))
+                .next()
+                .or_else(|| entry.select(&sel("a.link-title")).next());
+            let Some(anchor) = anchor else { continue };
+            let href = attr(anchor, "href");
+            let Some(mal_id) = href
+                .split("/anime/")
+                .nth(1)
+                .and_then(|tail| tail.split('/').next())
+                .and_then(|value| value.parse::<u64>().ok())
+            else {
+                continue;
+            };
+            let title = clean(&anchor.text().collect::<String>());
+            if title.is_empty() {
+                continue;
+            }
+
+            let image = entry
+                .select(&sel("img"))
+                .next()
+                .map(|image| {
+                    let lazy = attr(image, "data-src");
+                    if lazy.is_empty() {
+                        attr(image, "src")
+                    } else {
+                        lazy
+                    }
+                })
+                .unwrap_or_default();
+            let total = entry
+                .select(&sel(".info .item"))
+                .nth(1)
+                .and_then(|item| item.select(&sel("span")).next())
+                .map(|span| clean(&span.text().collect::<String>()))
+                .unwrap_or_default()
+                .trim_end_matches(" eps")
+                .to_string();
+
+            let card = Card {
+                slug: format!("mal-{mal_id}"),
+                title,
+                image,
+                href: format!("/jadwal/anime?title={}", encode(&clean(&anchor.text().collect::<String>()))),
+                kind: "series".into(),
+                kind_label: "Anime".into(),
+                time: "MAL".into(),
+                total,
+                provider: "MyAnimeList".into(),
+                ..Default::default()
+            };
+            if !is_adult_card(&card) && seen.insert(mal_id) {
+                entries.push(card);
+            }
+        }
+
+        days.push(ScheduleDay {
+            day: day_name,
+            id: day_id,
+            is_today: day.eq_ignore_ascii_case(today),
+            entries,
+        });
+    }
+
+    let order = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"];
+    days.sort_by_key(|day| order.iter().position(|id| *id == day.id).unwrap_or(99));
+    days
 }
 
 fn indonesian_day(day: &str) -> (String, String) {

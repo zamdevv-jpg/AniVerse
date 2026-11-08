@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-hero account-hero">
+  <div class="page-hero-copy">
+    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg> AniVerse</span>
+    <h1>Akun kamu</h1>
+    <p>Masuk untuk menyimpan profil dan komentar di perangkat ini.</p>
+  </div>
+</section>
+
+<section class="account-layout section-first">
+  <div class="panel account-auth" id="account-auth">
+    <div class="auth-heading">
+      <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg></span>
+      <h2 id="auth-title">Masuk ke AniVerse</h2>
+      <p id="auth-subtitle">Gunakan akun lokal di perangkat ini untuk menyimpan aktivitasmu.</p>
+    </div>
+
+    <form id="login-form" class="auth-form" autocomplete="on">
+      <label>Email<input type="email" name="email" autocomplete="username" required maxlength="120"></label>
+      <label>Kata sandi<input type="password" name="password" autocomplete="current-password" required minlength="8"></label>
+      <button class="btn btn-gold btn-lg" type="submit">Masuk</button>
+      <p class="auth-switch">Belum punya akun? <button class="text-btn" type="button" data-auth-switch="register">Buat akun</button></p>
+    </form>
+
+    <form id="register-form" class="auth-form" autocomplete="on" hidden>
+      <label>Nama tampilan<input type="text" name="name" autocomplete="nickname" required minlength="2" maxlength="32"></label>
+      <label>Email<input type="email" name="email" autocomplete="email" required maxlength="120"></label>
+      <label>Kata sandi<input type="password" name="password" autocomplete="new-password" required minlength="8"></label>
+      <button class="btn btn-gold btn-lg" type="submit">Buat akun lokal</button>
+      <p class="auth-switch">Sudah punya akun? <button class="text-btn" type="button" data-auth-switch="login">Masuk</button></p>
+    </form>
+
+    <p class="local-account-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg> Data akun tersimpan di perangkat ini dan belum tersinkron ke perangkat lain.</p>
+  </div>
+
+  <div class="panel account-profile" id="account-profile" hidden>
+    <div class="profile-cover"></div>
+    <div class="profile-heading">
+      <span class="profile-avatar" id="profile-avatar">A</span>
+      <div><h2 id="profile-name">AniVerse</h2><p id="profile-email"></p></div>
+      <button class="btn btn-ghost btn-sm" type="button" id="logout-button">Keluar</button>
+    </div>
+    <div class="profile-stats">
+      <a href="/histori"><strong id="profile-history-count">0</strong><span>ditonton</span></a>
+      <a href="#profile-activity" data-account-tab-link="comments"><strong id="profile-comment-count">0</strong><span>komentar</span></a>
+      <a href="/bookmark"><strong id="profile-bookmark-count">0</strong><span>bookmark</span></a>
+    </div>
+    <div class="profile-tabs" id="profile-activity">
+      <button class="is-active" type="button" data-account-tab="all">Semua</button>
+      <button type="button" data-account-tab="comments">Komentar</button>
+      <button type="button" data-account-tab="history">Histori</button>
+    </div>
+    <div class="profile-activity-list" id="profile-activity-list"></div>
+    <nav class="profile-links" aria-label="Menu akun">
+      <a href="/histori"><svg class="icon"><use href="#i-clock"/></svg> Histori tontonan <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
+      <a href="/bookmark"><svg class="icon"><use href="#i-bookmark"/></svg> Bookmark <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
+      <a href="/unduhan"><svg class="icon"><use href="#i-download"/></svg> Daftar unduhan <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
+      <a href="/offline"><svg class="icon"><use href="#i-device"/></svg> Tersimpan offline <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
+    </nav>
+    <p class="local-account-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg> Komentar, akun, dan aktivitas ini hanya tersedia di perangkat ini.</p>
+  </div>
+</section>
+{% endblock %}

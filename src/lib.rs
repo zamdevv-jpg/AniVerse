@@ -1,4 +1,5 @@
 pub mod artwork;
+pub mod doronime;
 pub mod models;
 pub mod nimegami;
 pub mod source;
@@ -23,11 +24,15 @@ use crate::{artwork::ArtworkResolver, source::Source, web::Site};
 
 pub const EMBEDDED_TEMPLATES: &[(&str, &str)] = &[
     ("anime.html", include_str!("../templates/anime.html")),
+    ("account.html", include_str!("../templates/account.html")),
     ("base.html", include_str!("../templates/base.html")),
     ("bookmark.html", include_str!("../templates/bookmark.html")),
     ("browse.html", include_str!("../templates/browse.html")),
+    ("downloads.html", include_str!("../templates/downloads.html")),
     ("error.html", include_str!("../templates/error.html")),
+    ("history.html", include_str!("../templates/history.html")),
     ("index.html", include_str!("../templates/index.html")),
+    ("offline.html", include_str!("../templates/offline.html")),
     ("schedule.html", include_str!("../templates/schedule.html")),
     ("search.html", include_str!("../templates/search.html")),
     ("watch.html", include_str!("../templates/watch.html")),
@@ -132,9 +137,15 @@ pub async fn build_app(
         .route("/jadwal", get(web::schedule))
         .route("/cari", get(web::search_page))
         .route("/bookmark", get(web::bookmarks))
+        .route("/jadwal/anime", get(web::schedule_anime))
+        .route("/akun", get(web::account))
+        .route("/histori", get(web::history_page))
+        .route("/unduhan", get(web::downloads_page))
+        .route("/offline", get(web::offline_page))
         .route("/acak", get(web::random))
         .route("/api/search", get(web::api_search))
         .route("/api/artwork", get(web::api_artwork))
+        .route("/service-worker.js", get(serve_service_worker))
         .route("/healthz", get(web::health))
         .route("/robots.txt", get(web::robots));
 
@@ -166,6 +177,16 @@ async fn serve_embedded_static(axum::extract::Path(path): axum::extract::Path<St
         }
     }
     StatusCode::NOT_FOUND.into_response()
+}
+
+async fn serve_service_worker() -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, HeaderValue::from_static("application/javascript; charset=utf-8"))
+        .header(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"))
+        .header("Service-Worker-Allowed", "/")
+        .body(Body::from(include_str!("../static/js/service-worker.js")))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
 pub async fn start_server(

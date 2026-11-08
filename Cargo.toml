@@ -1,8 +1,8 @@
 [package]
 name = "otakunime"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
-description = "AniVerse — situs streaming anime Sub Indo berbasis Rust, data dari Otakudesu"
+description = "AniVerse — katalog anime Sub Indo dari Nimegami, Otakudesu, dan Doronime"
 license = "MIT"
 
 [lib]

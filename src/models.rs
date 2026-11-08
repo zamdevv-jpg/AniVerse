@@ -263,47 +263,39 @@ pub fn encode(value: &str) -> String {
 /// - Hanya konten 18+ murni (Hentai, Erotica, Smut, Porn, 18+) yang diblokir.
 pub fn is_adult_genre(genre_str: &str) -> bool {
     let lower = genre_str.trim().to_lowercase();
-    if lower.is_empty() {
-        return false;
-    }
-    // Gore dan Ecchi secara eksplisit JANGAN disembunyikan
-    if lower.contains("ecchi") || lower.contains("gore") {
-        return false;
-    }
-    // "Adult Cast" di anime (MyAnimeList / AniList) merujuk pada karakter pekerja dewasa, bukan 18+
-    if lower == "adult cast" || lower == "adult-cast" {
-        return false;
-    }
-    // Mature / R-17+ / Violence / Profanity bukan pornografi/hentai
-    if lower.contains("mature") || lower.contains("r-17") || lower.contains("r17") || lower.contains("violence") {
+    let words = lower
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+    if words.is_empty() {
         return false;
     }
 
+    // MAL memakai "Adult Cast" untuk tema karakter dewasa, bukan konten 18+.
+    if words == ["adult", "cast"] {
+        return false;
+    }
+
+    let compact = words.join("");
     let adult_keywords = [
         "hentai",
         "erotica",
         "erotic",
-        "ero",
         "smut",
-        "18+",
-        "r18",
-        "r-18",
         "porn",
         "porno",
         "nsfw",
+        "rx",
+        "r18",
+        "18",
+        "18禁",
+        "netorare",
+        "persenggamaan",
     ];
 
-    for kw in adult_keywords {
-        if lower == kw || lower.contains(kw) {
-            return true;
-        }
-    }
-
-    if lower == "adult" || lower.starts_with("adult ") || lower.ends_with(" adult") {
-        return true;
-    }
-
-    false
+    words.iter().any(|word| adult_keywords.contains(word))
+        || compact == "adult"
+        || (words.contains(&"adult") && !words.contains(&"cast"))
 }
 
 /// Memeriksa apakah kartu mengandung genre atau indikasi konten 18+
@@ -311,20 +303,7 @@ pub fn is_adult_card(card: &Card) -> bool {
     if card.genres.iter().any(|g| is_adult_genre(g)) {
         return true;
     }
-    let lower_title = card.title.to_lowercase();
-    let lower_slug = card.slug.to_lowercase();
-
-    // Jangan sembunyikan jika judul/genre mengandung Gore atau Ecchi
-    if lower_title.contains("gore") || lower_title.contains("ecchi") {
-        return false;
-    }
-
-    for kw in ["hentai", "erotica", "smut", "r18", "r-18", "18+", "porno", "porn"] {
-        if lower_title.contains(kw) || lower_slug.contains(kw) {
-            return true;
-        }
-    }
-    false
+    is_adult_genre(&card.title) || is_adult_genre(&card.slug)
 }
 
 /// Normalisasi judul anime untuk deduplikasi antar provider.

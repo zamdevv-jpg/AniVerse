@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-hero">
+  <div class="page-hero-copy">
+    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg> Mode perangkat</span>
+    <h1>Tersimpan offline</h1>
+    <p>Halaman detail dan informasi anime yang disimpan tetap bisa dibuka tanpa internet. Video dari penyedia eksternal tidak disimpan di aplikasi.</p>
+  </div>
+</section>
+
+<section class="section section-first">
+  <div class="poster-grid" id="offline-grid"></div>
+  <div class="empty-state" id="offline-empty" hidden>
+    <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg></span>
+    <h3>Belum ada anime offline</h3>
+    <p>Buka halaman detail anime, lalu pilih “Simpan offline”.</p>
+    <a class="btn btn-gold" href="/anime">Jelajahi katalog</a>
+  </div>
+</section>
+{% endblock %}

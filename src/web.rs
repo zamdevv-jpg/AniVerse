@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use crate::{
     artwork::ArtworkResolver,
-    models::{BrowseParams, BrowseQuery, encode},
+    models::{BrowseParams, BrowseQuery, encode, normalize_title_for_dedup},
     source::Source,
 };
 
@@ -299,7 +299,25 @@ pub async fn watch(State(state): State<AppState>, Path(slug): Path<String>) -> R
     let series = if episode.series_slug.is_empty() {
         None
     } else {
-        state.source.detail(&episode.series_slug).await.ok()
+        match state.source.detail(&episode.series_slug).await {
+            Ok(detail) => Some(detail),
+            Err(error) => {
+                let message = error.to_string().to_lowercase();
+                if message.contains("18+")
+                    || message.contains("dewasa")
+                    || message.contains("hentai")
+                    || message.contains("erotica")
+                {
+                    return error_page(
+                        &state,
+                        StatusCode::FORBIDDEN,
+                        "Konten 18+ Diblokir",
+                        "Episode ini diblokir dan tidak dapat diakses karena mengandung genre dewasa.",
+                    );
+                }
+                None
+            }
+        }
     };
 
     let title = format!(
@@ -353,6 +371,58 @@ pub async fn schedule(State(state): State<AppState>) -> Response {
     insert(&mut ctx, "empty", days.is_empty());
 
     render(&state, "schedule.html", &ctx, StatusCode::OK)
+}
+
+#[derive(Deserialize)]
+pub struct ScheduleAnimeQuery {
+    title: String,
+}
+
+pub async fn schedule_anime(
+    State(state): State<AppState>,
+    Query(query): Query<ScheduleAnimeQuery>,
+) -> Response {
+    let title = query.title.trim();
+    if title.chars().count() < 2 {
+        return Redirect::to("/anime").into_response();
+    }
+    let wanted = normalize_title_for_dedup(title);
+
+    let nimegami = state
+        .source
+        .nimegami
+        .search(title, 10)
+        .await
+        .unwrap_or_default();
+    if let Some(card) = nimegami
+        .iter()
+        .find(|card| normalize_title_for_dedup(&card.title) == wanted)
+    {
+        return Redirect::to(&card.href).into_response();
+    }
+
+    let doronime = state
+        .source
+        .doronime
+        .search(title, 10)
+        .await
+        .unwrap_or_default();
+    if let Some(card) = doronime
+        .iter()
+        .find(|card| normalize_title_for_dedup(&card.title) == wanted)
+    {
+        return Redirect::to(&card.href).into_response();
+    }
+
+    let fallback = state.source.search(title, 10).await.unwrap_or_default();
+    if let Some(card) = fallback
+        .iter()
+        .find(|card| normalize_title_for_dedup(&card.title) == wanted)
+    {
+        return Redirect::to(&card.href).into_response();
+    }
+
+    Redirect::to(&format!("/cari?q={}", encode(title))).into_response()
 }
 
 pub async fn search_page(
@@ -488,6 +558,33 @@ pub async fn bookmarks(State(state): State<AppState>) -> Response {
         "Daftar anime yang kamu simpan di perangkat ini.",
     );
     render(&state, "bookmark.html", &ctx, StatusCode::OK)
+}
+
+fn local_feature_page(state: &AppState, active: &str, template: &str, title: &str, description: &str) -> Response {
+    let ctx = with(state, active, &format!("{title} — {}", state.site.name), description);
+    render(state, template, &ctx, StatusCode::OK)
+}
+
+pub async fn account(State(state): State<AppState>) -> Response {
+    local_feature_page(
+        &state,
+        "account",
+        "account.html",
+        "Akun",
+        "Profil, histori, unduhan, dan koleksi offline AniVerse di perangkat ini.",
+    )
+}
+
+pub async fn history_page(State(state): State<AppState>) -> Response {
+    local_feature_page(&state, "history", "history.html", "Histori tontonan", "Lanjutkan anime yang terakhir kamu tonton.")
+}
+
+pub async fn downloads_page(State(state): State<AppState>) -> Response {
+    local_feature_page(&state, "downloads", "downloads.html", "Unduhan", "Tautan unduhan episode yang disimpan di perangkat ini.")
+}
+
+pub async fn offline_page(State(state): State<AppState>) -> Response {
+    local_feature_page(&state, "offline", "offline.html", "Tersimpan offline", "Halaman detail anime yang disimpan untuk dibuka tanpa internet.")
 }
 
 pub async fn not_found(State(state): State<AppState>) -> Response {

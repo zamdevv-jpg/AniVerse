@@ -7,7 +7,7 @@
   <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
   <div>
     <strong>Sumber data sedang tidak bisa diakses.</strong>
-    <span>Cache kosong dan Otakudesu belum merespons. Coba muat ulang beberapa saat lagi.</span>
+    <span>Cache kosong dan sumber anime belum merespons. Coba muat ulang beberapa saat lagi.</span>
   </div>
   <a class="btn btn-ghost btn-sm" href="/">Muat ulang</a>
 </div>
@@ -93,13 +93,30 @@
 </section>
 {% endif %}
 
+<section class="home-discovery" aria-label="Cari anime">
+  <form class="home-search" action="/cari" method="get" role="search">
+    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+    <input type="search" name="q" placeholder="Cari anime di sini" aria-label="Cari anime">
+    <button type="submit" aria-label="Cari"><svg class="icon"><use href="#i-chevron-right"/></svg></button>
+  </form>
+  <div class="home-genres-wrap">
+    <div class="home-genres-heading"><h2>Genre</h2><a href="/anime">Semua genre</a></div>
+    <nav class="home-genres" aria-label="Genre anime">
+      <a href="/anime?genre=Action">Action</a><a href="/anime?genre=Adventure">Adventure</a>
+      <a href="/anime?genre=Comedy">Comedy</a><a href="/anime?genre=Drama">Drama</a>
+      <a href="/anime?genre=Fantasy">Fantasy</a><a href="/anime?genre=Romance">Romance</a>
+      <a href="/anime?genre=Sci-Fi">Sci-Fi</a><a href="/anime?genre=Sports">Sports</a>
+    </nav>
+  </div>
+</section>
+
 <section class="section" id="continue-watching" hidden>
   <div class="section-head">
     <div>
       <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-clock-play"/></svg> Riwayat perangkat ini</span>
       <h2>Lanjut tonton</h2>
     </div>
-    <a class="see-all" href="/bookmark">Lihat bookmark <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+    <a class="see-all" href="/histori">Lihat histori <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
   </div>
   <div class="poster-grid" id="continue-grid"></div>
 </section>

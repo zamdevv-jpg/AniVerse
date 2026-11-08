@@ -10,6 +10,8 @@
       <a href="/anime?status=Ongoing&order=update">Ongoing</a>
       <a href="/anime?type=Movie&order=update">Movie</a>
       <a href="/jadwal" class="{{ 'is-active' if active == 'schedule' else '' }}">Jadwal</a>
+      <a href="/histori" class="{{ 'is-active' if active == 'history' else '' }}">Histori</a>
+      <a href="/unduhan" class="{{ 'is-active' if active == 'downloads' else '' }}">Unduhan</a>
       <a href="/bookmark" class="{{ 'is-active' if active == 'bookmark' else '' }}">Bookmark</a>
     </nav>
 
@@ -24,8 +26,8 @@
       <a class="icon-btn desktop-only" href="/acak" title="Anime acak" aria-label="Anime acak">
         <svg class="icon" aria-hidden="true"><use href="#i-shuffle"/></svg>
       </a>
-      <a class="icon-btn desktop-only" href="/bookmark" title="Bookmark saya" aria-label="Bookmark saya">
-        <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+      <a class="icon-btn" href="/akun" title="Akun saya" aria-label="Akun saya">
+        <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>
       </a>
       <button class="icon-btn mobile-only" id="mobile-search-toggle" type="button" aria-label="Buka pencarian" aria-expanded="false">
         <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>

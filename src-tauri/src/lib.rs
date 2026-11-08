@@ -12,9 +12,9 @@ pub fn run() {
     let (shutdown_sender_tx, shutdown_sender_rx) =
         std::sync::mpsc::sync_channel::<tokio::sync::oneshot::Sender<()>>(1);
     let (server_thread_stop, server_thread_stop_rx) = std::sync::mpsc::channel::<()>();
-    // Android's splash screen retries localhost:3000 if the initial Tauri
-    // navigation races the WebView startup. Desktop builds use an ephemeral port.
-    let desired_port = if cfg!(target_os = "android") { 3000 } else { 0 };
+    // Keep the local origin stable so service-worker offline pages survive restarts.
+    // If the port is occupied, start_server falls back to an available port.
+    let desired_port = 3000;
 
     // Spawn the embedded Axum backend on a dedicated background thread
     std::thread::spawn(move || {

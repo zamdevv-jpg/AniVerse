@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{ meta_title }}</title>
   <meta name="description" content="{{ meta_description }}">
-  <meta name="theme-color" content="#08080b">
+  <meta name="theme-color" content="#101214">
   <meta name="color-scheme" content="dark">
   <meta property="og:site_name" content="{{ site_name }}">
   <meta property="og:type" content="website">
@@ -22,13 +22,14 @@
   <link rel="preconnect" href="https://i2.wp.com">
   <link rel="preconnect" href="https://i3.wp.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261108-ui3">
 </head>
 <body data-page="{{ active }}">
   <a class="skip-link" href="#main">Lewati ke konten</a>
   {% include "partials/icons.html" %}
   <div class="app-shell">
     {% include "partials/header.html" %}
+    <div class="offline-banner" id="offline-banner" hidden><svg class="icon"><use href="#i-device"/></svg> Mode offline · sebagian konten online tidak tersedia</div>
     <main id="main" class="site-main container">
       {% block content %}{% endblock %}
     </main>

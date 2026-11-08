@@ -53,11 +53,26 @@
             </span>
           </div>
         </div>
-        <a class="btn btn-ghost btn-sm" href="{{ episode.source_url }}" target="_blank" rel="noopener noreferrer">
-          <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
-          Sumber
-        </a>
+        <div class="player-actions">
+          {% if episode.embed_url %}
+          <a id="player-open-current" class="btn btn-ghost btn-sm" href="{{ episode.embed_url }}" target="_blank" rel="noopener noreferrer">
+            <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+            Buka player
+          </a>
+          {% endif %}
+          <a class="btn btn-ghost btn-sm" href="{{ episode.source_url }}" target="_blank" rel="noopener noreferrer">
+            <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
+            Sumber
+          </a>
+        </div>
       </div>
+
+      {% if episode.embed_url %}
+      <div class="player-help" role="note">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+        <p>Jika muncul “refused to connect” atau player terus memuat, host mungkin membatasi iframe. Pilih server lain atau buka player di tab baru.</p>
+      </div>
+      {% endif %}
     </div>
 
     {% if episode.servers|length > 0 %}
@@ -148,11 +163,37 @@
             Download
             <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>
           </a>
+          <button class="download-save" type="button" data-save-download
+            data-title="{{ episode.series_title }} · Episode {{ episode.episode_number }}"
+            data-server="{{ download.server }}" data-quality="{{ download.quality }}"
+            data-url="{{ download.url }}" data-image="{{ episode.series_image }}">
+            Simpan tautan
+          </button>
         </div>
         {% endfor %}
       </div>
     </section>
     {% endif %}
+
+    <section class="panel comments-panel" id="comments-panel"
+      data-comment-slug="{{ episode.slug }}" data-comment-title="{{ episode.title }}">
+      <div class="panel-head">
+        <div><span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-message"/></svg> Ruang penonton</span><h2>Komentar</h2></div>
+        <span class="pill" id="comment-count">0 komentar</span>
+      </div>
+      <p class="local-comment-note">Komentar tersimpan di perangkat ini.</p>
+      <div class="comment-gate" id="comment-gate" hidden>
+        <span>Masuk untuk menulis komentar.</span><a class="btn btn-ghost btn-sm" href="/akun">Masuk / Buat akun</a>
+      </div>
+      <form id="comment-form" class="comment-form">
+        <label class="sr-only" for="comment-input">Tulis komentar</label>
+        <textarea id="comment-input" name="comment" rows="3" maxlength="600" placeholder="Bagaimana episode ini menurutmu?" required></textarea>
+        <div class="comment-form-footer"><span><b id="comment-author">Penonton</b> · sopan dan santun</span><button class="btn btn-gold btn-sm" type="submit">Kirim komentar</button></div>
+      </form>
+      <div class="comment-tabs"><button type="button" class="is-active" data-comment-sort="top">Teratas</button><button type="button" data-comment-sort="new">Terbaru</button></div>
+      <div class="comment-list" id="comment-list"></div>
+      <div class="comments-empty" id="comments-empty" hidden>Belum ada komentar. Jadilah yang pertama berdiskusi.</div>
+    </section>
   </div>
 
   <aside class="watch-aside">

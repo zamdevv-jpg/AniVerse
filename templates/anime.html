@@ -82,6 +82,18 @@
           <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
           <span class="bookmark-label">Bookmark</span>
         </button>
+        <button
+          class="btn btn-ghost"
+          type="button"
+          data-save-offline
+          data-slug="{{ detail.slug }}"
+          data-title="{{ detail.title }}"
+          data-image="{{ detail.image }}"
+          data-href="/anime/{{ detail.slug|urlencode }}"
+        >
+          <svg class="icon" aria-hidden="true"><use href="#i-device"/></svg>
+          <span>Simpan offline</span>
+        </button>
       </div>
     </div>
   </div>
