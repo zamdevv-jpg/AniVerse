@@ -1,24 +1,31 @@
 {% extends "base.html" %}
-{% from "partials/card.html" import schedule_card %}
+{% from "partials/card.html" import episode_row %}
 
 {% block content %}
-<section class="page-hero page-hero-schedule">
-  <div class="page-hero-copy">
-    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg> Jadwal mingguan</span>
-    <h1>Rilis anime minggu ini</h1>
-    <p>Jadwal mengikuti kelompok hari di MyAnimeList. Genre Hentai dan Erotica disaring sebelum ditampilkan; informasi rilis dapat berubah.</p>
+<section class="page-head page-head-schedule">
+  <div class="page-head-copy">
+    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg> Jadwal update</span>
+    <h1>Jadwal anime mingguan</h1>
+    <p>Jadwal tayang dari MyAnimeList, ditampilkan untuk tujuh tanggal dalam minggu yang dipilih.</p>
   </div>
-  <div class="page-hero-orbit" aria-hidden="true">
-    <span class="orbit-ring"></span>
-    <span class="orbit-day">WIB</span>
+  <div class="schedule-badge" aria-hidden="true">
+    <span class="schedule-badge-top">WIB</span>
+    <span class="schedule-badge-main">Update</span>
   </div>
 </section>
 
+<div class="week-switcher" aria-label="Pilih minggu">
+  <a class="week-arrow" href="/jadwal?week={{ previous_week }}" aria-label="Minggu sebelumnya"><svg class="icon"><use href="#i-chevron-left"/></svg><span>Sebelumnya</span></a>
+  <strong>{{ week_label }}</strong>
+  <a class="week-arrow" href="/jadwal?week={{ next_week }}" aria-label="Minggu berikutnya"><span>Berikutnya</span><svg class="icon"><use href="#i-chevron-right"/></svg></a>
+</div>
 {% if days|length > 0 %}
 <nav class="day-nav" aria-label="Pilih hari">
   {% for day in days %}
-  <a class="day-pill{{ ' is-today' if day.is_today else '' }}" href="#hari-{{ day.id }}">
-    {{ day.day }}
+  <a class="day-pill{{ ' is-today' if day.is_today else '' }}" href="#hari-{{ day.id }}" aria-label="{{ day.day }}">
+    <span class="day-pill-weekday">{{ day.weekday[:3] }}</span>
+    <strong>{{ day.date_number }}</strong>
+    <span class="day-pill-month">{{ day.month_short }}</span>
     {% if day.is_today %}<span class="dot-live"></span>{% endif %}
   </a>
   {% endfor %}
@@ -26,33 +33,24 @@
 
 {% for day in days %}
 <section class="schedule-day{{ ' is-today' if day.is_today else '' }}" id="hari-{{ day.id }}">
-  <div class="section-head">
-    <div>
-      <span class="eyebrow">
-        {% if day.is_today %}Hari ini{% else %}Jadwal{% endif %}
-      </span>
-      <h2>{{ day.day }}{% if day.is_today %} <span class="badge-today">Hari ini</span>{% endif %}</h2>
-    </div>
-    <span class="pill">{{ day.entries|length }} anime</span>
+  <div class="schedule-day-head">
+    <h2>{{ day.day }}</h2>
+    <span class="pill">{{ day.entries|length }} episode</span>
   </div>
-
-  {% if day.entries|length > 0 %}
-  <div class="schedule-grid">
-    {% for card in day.entries %}{{ schedule_card(card) }}{% endfor %}
+  <div class="schedule-list">
+    {% for card in day.entries %}
+    {{ episode_row(card) }}
+    {% endfor %}
+    {% if day.entries|length == 0 %}<p class="schedule-empty">Tidak ada anime yang dijadwalkan untuk tanggal ini.</p>{% endif %}
   </div>
-  {% else %}
-  <div class="empty-state compact">
-    <p>Tidak ada jadwal rilis untuk hari ini.</p>
-  </div>
-  {% endif %}
 </section>
 {% endfor %}
 {% else %}
 <div class="empty-state">
   <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span>
   <h3>Jadwal belum tersedia</h3>
-  <p>Sumber sedang tidak mengirimkan jadwal. Coba lagi beberapa saat lagi.</p>
-  <a class="btn btn-gold" href="/jadwal">Muat ulang</a>
+  <p>Jadwal MyAnimeList belum merespons. Coba muat ulang atau buka minggu lain.</p>
+  <a class="btn btn-gold" href="/jadwal?week={{ week_start }}">Muat ulang jadwal</a>
 </div>
 {% endif %}
 {% endblock %}

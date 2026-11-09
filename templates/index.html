@@ -1,58 +1,45 @@
 {% extends "base.html" %}
-{% from "partials/card.html" import poster_card, rank_card, schedule_card %}
+{% from "partials/card.html" import poster_card, list_card %}
 
 {% block content %}
 {% if source_error %}
 <div class="notice notice-warn">
   <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
   <div>
-    <strong>Sumber data sedang tidak bisa diakses.</strong>
-    <span>Cache kosong dan sumber anime belum merespons. Coba muat ulang beberapa saat lagi.</span>
+    <strong>Sumber data belum merespons.</strong>
+    <span>Nimegami sedang tidak bisa diakses dari server ini. Coba muat ulang beberapa saat lagi.</span>
   </div>
   <a class="btn btn-ghost btn-sm" href="/">Muat ulang</a>
 </div>
 {% endif %}
 
 {% if hero|length > 0 %}
-<section class="hero" id="hero" data-hero>
+<section class="hero-carousel" id="hero" data-hero aria-label="Anime pilihan">
   <div class="hero-track">
     {% for slide in hero %}
-    <article class="hero-slide{{ ' is-active' if loop.first else '' }}" style="--hero-image:url({{ slide.image|backdrop }})">
-      <div class="hero-bg" aria-hidden="true"></div>
-      <div class="hero-shade" aria-hidden="true"></div>
-
+    <article class="hero-slide{{ ' is-active' if loop.first else '' }}" aria-hidden="{{ 'false' if loop.first else 'true' }}">
+      <div class="hero-image" style="background-image:url('{{ slide.image|backdrop }}')" aria-hidden="true"></div>
+      <div class="hero-overlay" aria-hidden="true"></div>
       <div class="hero-content">
         <span class="hero-eyebrow">
           <svg class="icon fill" aria-hidden="true"><use href="#i-flame"/></svg>
-          Episode terbaru
+          Pilihan hari ini
+          {% if slide.kind_label %}<em>{{ slide.kind_label }}</em>{% endif %}
         </span>
-        <h1>{{ slide.title }}</h1>
+        <h1 class="hero-title">{{ slide.title }}</h1>
         <div class="hero-meta">
-          {% if slide.episode %}<span class="chip chip-gold">{{ slide.episode }}</span>{% endif %}
-          <span class="chip">Sub Indo</span>
-          {% if slide.kind_label %}<span class="chip">{{ slide.kind_label }}</span>{% endif %}
-          {% if slide.time %}
-          <span class="hero-time">
-            <svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>
-            {{ slide.time }}
-          </span>
-          {% endif %}
+          {% if slide.rating %}<span class="hero-rating"><svg class="icon fill" aria-hidden="true"><use href="#i-star-fill"/></svg>{{ slide.rating }}</span>{% endif %}
+          {% for item in slide.meta[:3] %}
+          <span>{{ item }}</span>
+          {% endfor %}
         </div>
+        {% if slide.synopsis %}<p class="hero-synopsis">{{ slide.synopsis }}</p>{% endif %}
         <div class="hero-actions">
-          <a class="btn btn-gold btn-lg" href="{{ slide.href }}">
+          <a class="btn btn-gold" href="{{ slide.href }}">
             <svg class="icon fill" aria-hidden="true"><use href="#i-play"/></svg>
             Tonton sekarang
           </a>
-          <a class="btn btn-glass btn-lg" href="/anime">Jelajahi katalog</a>
-        </div>
-      </div>
-
-      <div class="hero-poster" aria-hidden="true">
-        <div class="hero-poster-frame">
-          {% if slide.image %}
-          <img src="{{ slide.image|poster }}" alt="" loading="eager" decoding="async">
-          {% endif %}
-          <span class="hero-poster-tag">SUB<br>INDO</span>
+          <a class="btn btn-glass" href="{{ slide.href }}">Detail anime</a>
         </div>
       </div>
     </article>
@@ -60,152 +47,87 @@
   </div>
 
   {% if hero|length > 1 %}
-  <div class="hero-nav">
-    <button class="hero-arrow" id="hero-prev" type="button" aria-label="Slide sebelumnya">
-      <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
-    </button>
+  <div class="hero-controls">
     <div class="hero-dots" role="tablist" aria-label="Pilih slide">
       {% for slide in hero %}
-      <button class="hero-dot{{ ' is-active' if loop.first else '' }}" type="button" data-slide="{{ loop.index0 }}" aria-label="Slide {{ loop.index }}"></button>
+      <button class="hero-dot{{ ' is-active' if loop.first else '' }}" type="button" aria-label="Slide {{ loop.index }}"></button>
       {% endfor %}
     </div>
-    <button class="hero-arrow" id="hero-next" type="button" aria-label="Slide berikutnya">
-      <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-    </button>
-  </div>
-  <span class="hero-count"><b id="hero-current">01</b> / <span id="hero-total">{{ hero|length }}</span></span>
-  {% endif %}
-</section>
-{% else %}
-<section class="hero hero-empty">
-  <div class="hero-empty-inner">
-    <span class="hero-eyebrow">
-      <svg class="icon fill" aria-hidden="true"><use href="#i-sparkles"/></svg>
-      Selamat datang
-    </span>
-    <h1>Nonton anime Sub Indo tanpa ribet.</h1>
-    <p>Katalog terus diperbarui dari {{ source_host }}. Mulai dari rilisan terbaru atau jelajahi katalog.</p>
-    <div class="hero-actions">
-      <a class="btn btn-gold btn-lg" href="/anime?order=update">Lihat rilisan terbaru</a>
-      <a class="btn btn-glass btn-lg" href="/jadwal">Jadwal rilis</a>
+    <div class="hero-arrows">
+      <span class="hero-count"><b id="hero-current">01</b>/<span id="hero-total">{{ hero|length }}</span></span>
+      <button class="hero-arrow" id="hero-prev" type="button" aria-label="Sebelumnya"><svg class="icon"><use href="#i-chevron-left"/></svg></button>
+      <button class="hero-arrow" id="hero-next" type="button" aria-label="Berikutnya"><svg class="icon"><use href="#i-chevron-right"/></svg></button>
     </div>
   </div>
+  {% endif %}
 </section>
 {% endif %}
 
-<section class="home-discovery" aria-label="Cari anime">
-  <form class="home-search" action="/cari" method="get" role="search">
-    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-    <input type="search" name="q" placeholder="Cari anime di sini" aria-label="Cari anime">
-    <button type="submit" aria-label="Cari"><svg class="icon"><use href="#i-chevron-right"/></svg></button>
-  </form>
-  <div class="home-genres-wrap">
-    <div class="home-genres-heading"><h2>Genre</h2><a href="/anime">Semua genre</a></div>
-    <nav class="home-genres" aria-label="Genre anime">
-      <a href="/anime?genre=Action">Action</a><a href="/anime?genre=Adventure">Adventure</a>
-      <a href="/anime?genre=Comedy">Comedy</a><a href="/anime?genre=Drama">Drama</a>
-      <a href="/anime?genre=Fantasy">Fantasy</a><a href="/anime?genre=Romance">Romance</a>
-      <a href="/anime?genre=Sci-Fi">Sci-Fi</a><a href="/anime?genre=Sports">Sports</a>
-    </nav>
-  </div>
-</section>
+{% if genres|length > 0 %}
+<nav class="chip-strip" aria-label="Genre populer">
+  <a class="chip{{ ' is-active' if not query }}" href="/anime">Semua</a>
+  {% for genre in genres[:14] %}
+  <a class="chip" href="{{ genre.href }}">{{ genre.name }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
 
 <section class="section" id="continue-watching" hidden>
   <div class="section-head">
-    <div>
-      <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-clock-play"/></svg> Riwayat perangkat ini</span>
-      <h2>Lanjut tonton</h2>
-    </div>
-    <a class="see-all" href="/histori">Lihat histori <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+    <h2 class="section-title">Lanjut tonton</h2>
+    <a class="section-link" href="/histori">Riwayat <svg class="icon"><use href="#i-chevron-right"/></svg></a>
   </div>
   <div class="poster-grid" id="continue-grid"></div>
 </section>
 
-{% if latest|length > 0 %}
 <section class="section">
   <div class="section-head">
     <div>
-      <span class="eyebrow"><svg class="icon fill" aria-hidden="true"><use href="#i-flame"/></svg> Baru tayang</span>
-      <h2>Rilisan terbaru</h2>
+      <h2 class="section-title">Update terbaru</h2>
+      <p class="section-sub">Episode baru dari Nimegami</p>
     </div>
-    <a class="see-all" href="/anime?order=update">Lihat semua <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+    <a class="section-link" href="/anime?order=update">Lihat semua <svg class="icon"><use href="#i-chevron-right"/></svg></a>
   </div>
+
+  {% if latest|length > 0 %}
   <div class="poster-grid">
-    {% for card in latest %}{{ poster_card(card) }}{% endfor %}
+    {% for card in latest %}
+    {{ poster_card(card) }}
+    {% endfor %}
   </div>
+  {% else %}
+  <div class="empty-state">
+    <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-film"/></svg></span>
+    <h3>Belum ada update</h3>
+    <p>Daftar episode terbaru belum bisa dimuat dari Nimegami.</p>
+    <a class="btn btn-gold" href="/anime">Buka katalog</a>
+  </div>
+  {% endif %}
 </section>
-{% endif %}
 
 {% if popular|length > 0 %}
 <section class="section">
   <div class="section-head">
     <div>
-      <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-star-fill"/></svg> Paling banyak ditonton</span>
-      <h2>Terpopuler minggu ini</h2>
+      <h2 class="section-title">Lagi ramai</h2>
+      <p class="section-sub">Paling banyak ditonton minggu ini</p>
     </div>
-    <span class="pill">Diperbarui tiap minggu</span>
+    <a class="section-link" href="/anime?order=popular">Lihat semua <svg class="icon"><use href="#i-chevron-right"/></svg></a>
   </div>
-  <div class="rank-grid">
-    {% for card in popular %}{{ rank_card(card) }}{% endfor %}
+  <div class="rank-list">
+    {% for card in popular %}
+    {{ list_card(card, show_rank=true) }}
+    {% endfor %}
   </div>
 </section>
 {% endif %}
 
-{% if ongoing|length > 0 %}
-<section class="section">
-  <div class="section-head">
-    <div>
-      <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg> Sedang tayang</span>
-      <h2>Anime ongoing</h2>
-    </div>
-    <a class="see-all" href="/anime?status=Ongoing&order=update">Lihat semua <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+<section class="cta-strip">
+  <div>
+    <span class="cta-eyebrow">Katalog lengkap</span>
+    <h2>Temukan anime berikutnya</h2>
+    <p>Filter genre, urutkan berdasarkan rating, atau cari langsung judul favoritmu.</p>
   </div>
-  <div class="poster-grid">
-    {% for card in ongoing %}{{ poster_card(card) }}{% endfor %}
-  </div>
-</section>
-{% endif %}
-
-{% if today and today.entries|length > 0 %}
-<section class="section">
-  <div class="section-head">
-    <div>
-      <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg> Jadwal hari ini</span>
-      <h2>{{ today.day }}{% if today.is_today %} <span class="badge-today">Hari ini</span>{% endif %}</h2>
-    </div>
-    <a class="see-all" href="/jadwal">Jadwal lengkap <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
-  </div>
-  <div class="schedule-grid">
-    {% for card in today.entries %}{{ schedule_card(card) }}{% endfor %}
-  </div>
-</section>
-{% endif %}
-
-{% if completed|length > 0 %}
-<section class="section">
-  <div class="section-head">
-    <div>
-      <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Sudah tamat</span>
-      <h2>Anime selesai</h2>
-    </div>
-    <a class="see-all" href="/anime?status=Completed&order=rating">Lihat semua <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
-  </div>
-  <div class="poster-grid">
-    {% for card in completed %}{{ poster_card(card) }}{% endfor %}
-  </div>
-</section>
-{% endif %}
-
-<section class="cta-band">
-  <div class="cta-band-glow" aria-hidden="true"></div>
-  <div class="cta-band-copy">
-    <span class="eyebrow">Bingung mau nonton apa?</span>
-    <h2>Serahkan pada keacakan.</h2>
-    <p>Tekan tombol ini dan biarkan kami memilihkan satu judul dari rilisan terbaru.</p>
-  </div>
-  <a class="btn btn-gold btn-lg" href="/acak">
-    <svg class="icon" aria-hidden="true"><use href="#i-shuffle"/></svg>
-    Anime acak
-  </a>
+  <a class="btn btn-gold" href="/anime">Jelajahi katalog <svg class="icon"><use href="#i-arrow-right"/></svg></a>
 </section>
 {% endblock %}

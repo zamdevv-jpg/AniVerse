@@ -2,65 +2,72 @@
 <a class="poster-card" href="{{ card.href }}" title="{{ card.title }}">
   <div class="poster">
     {% if card.image %}
-      <img class="lazy-hd-cover" src="{{ card.image }}" alt="{{ card.title }}" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}" data-hd-title="{{ card.title }}">
+    <img src="{{ card.image|poster }}" alt="Poster {{ card.title }}" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}">
     {% else %}
-      <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
+    <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
     {% endif %}
     <span class="poster-shade" aria-hidden="true"></span>
-    {% if card.kind_label %}<span class="badge badge-type">{{ card.kind_label }}</span>{% endif %}
-    {% if card.status %}<span class="badge badge-status{{ ' is-live' if card.status == 'Ongoing' else '' }}">{{ card.status }}</span>{% endif %}
-    {% if card.episode %}<span class="badge badge-ep">{{ card.episode }}</span>{% endif %}
-    <span class="poster-play" aria-hidden="true">
-      <svg class="icon fill"><use href="#i-play"/></svg>
-    </span>
-  </div>
-  <div class="poster-body">
-    <h3 class="poster-title">{{ card.title }}</h3>
-    <div class="poster-meta">
-      {% if card.episode %}<span>{{ card.episode }}</span>{% endif %}
-      {% if card.status %}<span>{{ card.status }}</span>{% elif card.kind_label %}<span>{{ card.kind_label }}</span>{% endif %}
-      {% if card.provider %}<span>{{ card.provider }}</span>{% endif %}
+    <div class="poster-top">
+      {% if card.score %}<span class="chip-score"><svg class="icon fill" aria-hidden="true"><use href="#i-star-fill"/></svg>{{ card.score }}</span>{% endif %}
+      {% if card.kind_label %}<span class="chip-format">{{ card.kind_label }}</span>{% endif %}
     </div>
+    {% if card.episode %}<span class="chip-ep">{{ card.episode }}</span>{% endif %}
+    {% if card.status == 'Ongoing' %}<span class="dot-ongoing" title="Ongoing" aria-label="Ongoing"></span>{% endif %}
+    <span class="poster-play" aria-hidden="true"><svg class="icon fill"><use href="#i-play"/></svg></span>
+  </div>
+  <div class="poster-info">
+    <h3 class="poster-title">{{ card.title }}</h3>
+    <p class="poster-sub">
+      {% if card.time %}{{ card.time }}{% elif card.year %}{{ card.year }}{% else %}Nimegami{% endif %}
+    </p>
   </div>
 </a>
 {% endmacro %}
 
-{% macro rank_card(card) %}
-<a class="rank-card" href="{{ card.href }}" title="{{ card.title }}">
-  <span class="rank-number">{{ card.rank }}</span>
-  <span class="rank-poster">
+{% macro list_card(card, show_rank=false) %}
+<a class="list-row" href="{{ card.href }}">
+  {% if show_rank %}<span class="list-rank{{ ' is-top' if card.rank <= 3 else '' }}">{{ '%02d'|format(card.rank) }}</span>{% endif %}
+  <span class="list-thumb">
     {% if card.image %}
-      <img class="lazy-hd-cover" src="{{ card.image }}" alt="{{ card.title }}" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}" data-hd-title="{{ card.title }}">
+    <img src="{{ card.image|poster }}" alt="" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}">
     {% else %}
-      <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
+    <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
+    {% endif %}
+    {% if card.kind_label %}<span class="list-kind">{{ card.kind_label }}</span>{% endif %}
+  </span>
+  <span class="list-body">
+    <strong class="list-title">{{ card.title }}</strong>
+    <span class="list-meta">
+      {% if card.episode %}<span class="list-ep">{{ card.episode }}</span>{% endif %}
+      {% if card.year %}<span>{{ card.year }}</span>{% endif %}
+      {% if card.time %}<span>{{ card.time }}</span>{% endif %}
+    </span>
+    {% if card.genres|length > 0 %}
+    <span class="list-genres">{{ card.genres[:2]|join(' · ') }}</span>
     {% endif %}
   </span>
-  <span class="rank-body">
-    <strong>{{ card.title }}</strong>
-    <span>{% if card.status %}{{ card.status }}{% elif card.episode %}{{ card.episode }}{% else %}Anime{% endif %}</span>
-  </span>
-  <span class="rank-arrow" aria-hidden="true">
-    <svg class="icon"><use href="#i-chevron-right"/></svg>
-  </span>
+  {% if card.score %}<span class="list-score"><svg class="icon fill" aria-hidden="true"><use href="#i-star-fill"/></svg>{{ card.score }}</span>{% endif %}
+  <svg class="icon list-chevron" aria-hidden="true"><use href="#i-chevron-right"/></svg>
 </a>
 {% endmacro %}
 
-{% macro schedule_card(card) %}
-<a class="schedule-card" href="{{ card.href }}" title="{{ card.title }}">
-  <span class="schedule-time">
-    <svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>
-    {{ card.time }}
-  </span>
-  <span class="schedule-poster">
+{% macro episode_row(card) %}
+<a class="schedule-row" href="{{ card.href }}">
+  <span class="schedule-thumb">
     {% if card.image %}
-      <img class="lazy-hd-cover" src="{{ card.image }}" alt="{{ card.title }}" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}" data-hd-title="{{ card.title }}">
+    <img src="{{ card.image|poster }}" alt="" loading="lazy" decoding="async" data-fallback="{{ card.title|initial }}">
     {% else %}
-      <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
+    <span class="poster-fallback" aria-hidden="true">{{ card.title|initial }}</span>
     {% endif %}
   </span>
   <span class="schedule-body">
     <strong>{{ card.title }}</strong>
-    <span>{% if card.total %}Total {{ card.total }} episode{% else %}Anime{% endif %}</span>
+    <span class="schedule-meta">
+      {% if card.episode %}<em>{{ card.episode }}</em>{% endif %}
+      {% if card.time %}<span>{{ card.time }}</span>{% endif %}
+      {% if card.genres|length > 0 %}<span>{{ card.genres[:2]|join(' · ') }}</span>{% endif %}
+    </span>
   </span>
+  <span class="schedule-play" aria-hidden="true"><svg class="icon fill"><use href="#i-play"/></svg></span>
 </a>
 {% endmacro %}

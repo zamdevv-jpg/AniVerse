@@ -1,21 +1,17 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-hero">
-  <div class="page-hero-copy">
-    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg> Perangkat ini</span>
+<section class="profile-head">
+  <div class="profile-avatar"><svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg></div>
+  <div class="profile-copy">
+    <span class="eyebrow">Koleksi pribadi</span>
     <h1>Bookmark saya</h1>
-    <p>Daftar ini disimpan di browser kamu, bukan di server. Aman, privat, dan tidak perlu akun.</p>
+    <p><b id="bookmark-count">0</b> judul disimpan di perangkat ini. Tidak perlu akun, tidak dikirim ke server.</p>
   </div>
-  <div class="page-hero-stats">
-    <div class="stat">
-      <strong id="bookmark-count">0</strong>
-      <span>judul disimpan</span>
-    </div>
-  </div>
+  <a class="btn btn-ghost btn-sm" href="/anime"><svg class="icon"><use href="#i-grid"/></svg> Cari anime</a>
 </section>
 
-<section class="section section-first">
+<section class="section">
   <div class="poster-grid" id="bookmark-grid"></div>
 
   <div class="empty-state" id="bookmark-empty" hidden>

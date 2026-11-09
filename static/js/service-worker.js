@@ -1,8 +1,9 @@
 const PAGE_CACHE = "aniverse-offline-pages-v1";
-const SHELL_CACHE = "aniverse-shell-v5";
+const SHELL_CACHE = "aniverse-shell-v8";
 const SHELL_ASSETS = [
-  "/static/css/style.css?v=20261108-player-fallback-v1",
-  "/static/js/app.js",
+  "/static/css/style.css?v=20261109-profile-comments-v2",
+  "/static/js/app.js?v=20261109-profile-comments-v2",
+  "/static/js/supabase.js?v=20261109-profile-comments-v2",
   "/static/js/logo.png",
   "/static/favicon.svg",
 ];

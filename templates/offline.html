@@ -1,15 +1,16 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-hero">
-  <div class="page-hero-copy">
-    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg> Mode perangkat</span>
+<section class="profile-head">
+  <div class="profile-avatar"><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg></div>
+  <div class="profile-copy">
+    <span class="eyebrow">Mode perangkat</span>
     <h1>Tersimpan offline</h1>
-    <p>Halaman detail dan informasi anime yang disimpan tetap bisa dibuka tanpa internet. Video dari penyedia eksternal tidak disimpan di aplikasi.</p>
+    <p>Halaman detail yang disimpan tetap bisa dibuka tanpa internet. Video tetap memerlukan koneksi.</p>
   </div>
 </section>
 
-<section class="section section-first">
+<section class="section">
   <div class="poster-grid" id="offline-grid"></div>
   <div class="empty-state" id="offline-empty" hidden>
     <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg></span>

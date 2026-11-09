@@ -1,47 +1,38 @@
-<header class="site-header" id="site-header">
-  <div class="container header-inner">
+<header class="topbar" id="site-header">
+  <div class="topbar-inner">
     <a class="brand" href="/" aria-label="{{ site_name }} — beranda">
-      <img src="/static/js/logo.png" alt="{{ site_name }}" class="brand-logo">
+      <img class="brand-logo" src="/static/js/logo.png" alt="{{ site_name }}">
     </a>
 
-    <nav class="desktop-nav" aria-label="Navigasi utama">
+    <nav class="topbar-nav" aria-label="Navigasi utama">
       <a href="/" class="{{ 'is-active' if active == 'home' else '' }}">Beranda</a>
       <a href="/anime" class="{{ 'is-active' if active == 'browse' else '' }}">Katalog</a>
-      <a href="/anime?status=Ongoing&order=update">Ongoing</a>
-      <a href="/anime?type=Movie&order=update">Movie</a>
       <a href="/jadwal" class="{{ 'is-active' if active == 'schedule' else '' }}">Jadwal</a>
-      <a href="/histori" class="{{ 'is-active' if active == 'history' else '' }}">Histori</a>
-      <a href="/unduhan" class="{{ 'is-active' if active == 'downloads' else '' }}">Unduhan</a>
-      <a href="/bookmark" class="{{ 'is-active' if active == 'bookmark' else '' }}">Bookmark</a>
+      <a href="/histori" class="{{ 'is-active' if active == 'history' else '' }}">Riwayat</a>
+      <a href="/bookmark" class="{{ 'is-active' if active == 'bookmark' else '' }}">Koleksi</a>
     </nav>
 
-    <form class="header-search" action="/anime" method="get" role="search" autocomplete="off">
-      <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-      <input type="search" name="q" id="live-search" placeholder="Cari anime, movie..." aria-label="Cari anime" value="{{ query }}">
-      <kbd aria-hidden="true">/</kbd>
-      <div class="search-dropdown" id="search-dropdown" hidden></div>
-    </form>
-
-    <div class="header-actions">
-      <a class="icon-btn desktop-only" href="/acak" title="Anime acak" aria-label="Anime acak">
-        <svg class="icon" aria-hidden="true"><use href="#i-shuffle"/></svg>
-      </a>
-      <a class="icon-btn" href="/akun" title="Akun saya" aria-label="Akun saya">
-        <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>
-      </a>
-      <button class="icon-btn mobile-only" id="mobile-search-toggle" type="button" aria-label="Buka pencarian" aria-expanded="false">
+    <div class="topbar-tools">
+      <form class="header-search" action="/anime" method="get" role="search" autocomplete="off">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="live-search" type="search" name="q" value="{{ query }}" placeholder="Cari anime..." aria-label="Cari anime" maxlength="120">
+        <div class="search-dropdown" id="search-dropdown" hidden></div>
+      </form>
+      <button class="icon-button mobile-search-toggle" id="mobile-search-toggle" type="button" aria-label="Buka pencarian" aria-expanded="false">
         <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
       </button>
-      <button class="icon-btn mobile-only" id="mobile-menu-toggle" type="button" aria-label="Buka menu" aria-expanded="false">
-        <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
-      </button>
+      <a class="icon-button" href="/bookmark" aria-label="Koleksi saya">
+        <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+      </a>
+      <a class="icon-button" href="/akun" aria-label="Akun saya">
+        <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>
+      </a>
     </div>
   </div>
-
   <div class="mobile-search-bar" id="mobile-search-bar" hidden>
     <form action="/anime" method="get" role="search">
       <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-      <input type="search" name="q" placeholder="Cari anime..." aria-label="Cari anime" value="{{ query }}">
+      <input type="search" name="q" value="{{ query }}" placeholder="Cari anime favoritmu..." aria-label="Cari anime">
       <button type="submit" class="btn btn-gold btn-sm">Cari</button>
     </form>
   </div>

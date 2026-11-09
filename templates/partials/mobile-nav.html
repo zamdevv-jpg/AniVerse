@@ -1,4 +1,4 @@
-<nav class="mobile-nav" aria-label="Navigasi bawah">
+<nav class="bottom-nav" aria-label="Navigasi bawah">
   <a href="/" class="{{ 'is-active' if active == 'home' else '' }}">
     <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
     <span>Beranda</span>
@@ -9,10 +9,10 @@
   </a>
   <a href="/histori" class="{{ 'is-active' if active == 'history' else '' }}">
     <svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>
-    <span>Histori</span>
+    <span>Riwayat</span>
   </a>
-  <a href="/unduhan" class="{{ 'is-active' if active == 'downloads' else '' }}">
-    <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
-    <span>Unduhan</span>
+  <a href="/bookmark" class="{{ 'is-active' if active == 'bookmark' else '' }}">
+    <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+    <span>Koleksi</span>
   </a>
 </nav>

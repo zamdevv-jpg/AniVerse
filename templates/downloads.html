@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-hero">
-  <div class="page-hero-copy">
-    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> Koleksi saya</span>
+<section class="profile-head">
+  <div class="profile-avatar"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></div>
+  <div class="profile-copy">
+    <span class="eyebrow">Koleksi saya</span>
     <h1>Unduhan</h1>
-    <p>Simpan tautan unduhan episode untuk dibuka lagi nanti.</p>
+    <p>Tautan unduhan episode yang kamu simpan. File tetap berasal dari penyedia sumber.</p>
   </div>
 </section>
 
-<section class="section section-first">
+<section class="section">
   <div class="saved-download-list" id="saved-download-list"></div>
   <div class="empty-state" id="downloads-empty" hidden>
     <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
     <h3>Belum ada tautan tersimpan</h3>
-    <p>Pilih “Simpan tautan” di halaman episode. File tetap diunduh dari penyedia sumber.</p>
+    <p>Tekan ikon bookmark pada daftar unduhan di halaman episode.</p>
     <a class="btn btn-gold" href="/anime">Cari anime</a>
   </div>
 </section>

@@ -1,21 +1,24 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-hero">
-  <div class="page-hero-copy">
+<section class="profile-head">
+  <div class="profile-avatar" id="history-avatar">A</div>
+  <div class="profile-copy">
     <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg> Perangkat ini</span>
-    <h1>Histori tontonan</h1>
-    <p>Lanjutkan anime yang terakhir kamu tonton.</p>
+    <h1>Riwayat tontonan</h1>
+    <p>Lanjutkan dari episode terakhir yang kamu buka. Riwayat disimpan di browser ini.</p>
   </div>
-  <button class="btn btn-ghost" type="button" id="clear-history"><svg class="icon"><use href="#i-trash"/></svg> Hapus histori</button>
+  <button class="btn btn-ghost btn-sm" type="button" id="clear-history">
+    <svg class="icon"><use href="#i-trash"/></svg> Hapus riwayat
+  </button>
 </section>
 
-<section class="section section-first">
-  <div class="history-list" id="history-list"></div>
+<section class="section">
+  <div class="history-groups" id="history-list"></div>
   <div class="empty-state" id="history-empty" hidden>
     <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>
-    <h3>Histori masih kosong</h3>
-    <p>Episode yang kamu buka akan muncul di sini.</p>
+    <h3>Riwayat masih kosong</h3>
+    <p>Episode yang kamu buka akan muncul di sini, dikelompokkan per hari.</p>
     <a class="btn btn-gold" href="/anime">Jelajahi anime</a>
   </div>
 </section>

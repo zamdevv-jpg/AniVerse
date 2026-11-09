@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{ meta_title }}</title>
   <meta name="description" content="{{ meta_description }}">
-  <meta name="theme-color" content="#101214">
+  <meta name="theme-color" content="#0b0b0d">
   <meta name="color-scheme" content="dark">
   <meta property="og:site_name" content="{{ site_name }}">
   <meta property="og:type" content="website">
@@ -17,20 +17,17 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://i0.wp.com">
-  <link rel="preconnect" href="https://i1.wp.com">
-  <link rel="preconnect" href="https://i2.wp.com">
-  <link rel="preconnect" href="https://i3.wp.com">
+  <link rel="preconnect" href="https://nimegami.id">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261108-ui3">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261109-profile-comments-v2">
 </head>
-<body data-page="{{ active }}">
+<body data-page="{{ active }}" data-supabase-url="{{ supabase_url }}" data-supabase-anon-key="{{ supabase_anon_key }}">
   <a class="skip-link" href="#main">Lewati ke konten</a>
   {% include "partials/icons.html" %}
   <div class="app-shell">
     {% include "partials/header.html" %}
-    <div class="offline-banner" id="offline-banner" hidden><svg class="icon"><use href="#i-device"/></svg> Mode offline · sebagian konten online tidak tersedia</div>
-    <main id="main" class="site-main container">
+    <div class="offline-banner" id="offline-banner" hidden><svg class="icon"><use href="#i-device"/></svg> Mode offline · sebagian konten tidak tersedia</div>
+    <main id="main" class="site-main">
       {% block content %}{% endblock %}
     </main>
     {% include "partials/footer.html" %}
@@ -38,9 +35,14 @@
   {% include "partials/mobile-nav.html" %}
   <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
   <noscript>
-    <div class="noscript-note">Aktifkan JavaScript untuk pencarian instan, pemilih server, dan bookmark.</div>
+    <div class="noscript-note">Aktifkan JavaScript untuk pencarian instan, pemilih kualitas, dan koleksi.</div>
   </noscript>
-  <script src="/static/js/app.js" defer></script>
+  {% if supabase_url and supabase_anon_key %}
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4/dist/tus.min.js" defer></script>
+  {% endif %}
+  <script src="/static/js/app.js?v=20261109-profile-comments-v2" defer></script>
+  <script src="/static/js/supabase.js?v=20261109-profile-comments-v2" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

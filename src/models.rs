@@ -16,6 +16,55 @@ pub struct Card {
     pub rank: usize,
     pub genres: Vec<String>,
     pub provider: String,
+    /// Skor komunitas dari sumber (contoh: "9.3").
+    pub score: String,
+    /// Tahun rilis singkat (contoh: "2017").
+    pub year: String,
+    /// Waktu update dalam format ISO/UTC, dipakai untuk pengelompokan harian.
+    pub updated_at: String,
+}
+
+/// Satu slide hero di beranda.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct HeroSlide {
+    pub slug: String,
+    pub title: String,
+    pub href: String,
+    pub image: String,
+    pub synopsis: String,
+    pub rating: String,
+    pub kind_label: String,
+    pub meta: Vec<String>,
+}
+
+/// Sumber video untuk satu episode. `direct` berarti URL MP4 bisa diputar
+/// langsung oleh elemen <video>, sedangkan embed hanya bisa dibuka di tab baru
+/// atau iframe pihak ketiga.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct StreamSource {
+    pub quality: String,
+    pub rank: u32,
+    pub label: String,
+    pub url: String,
+    /// URL yang dipakai elemen <video>. Untuk sumber langsung ini adalah
+    /// proxy lokal agar header Referer CDN tetap benar.
+    pub play_url: String,
+    /// Halaman streaming Nimegami (untuk tombol "buka sumber").
+    pub page: String,
+    pub direct: bool,
+    pub available: bool,
+    pub note: String,
+}
+
+/// Ringkasan kualitas untuk tombol pemilih di halaman tonton.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct QualityOption {
+    pub quality: String,
+    pub rank: u32,
+    pub available: bool,
+    pub url: String,
+    pub server: String,
+    pub count: usize,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -62,6 +111,8 @@ pub struct AnimeDetail {
     pub banner_image: String,
     pub trailer: String,
     pub rating: String,
+    pub score: String,
+    pub votes: String,
     pub synopsis: String,
     pub status: String,
     pub studio: String,
@@ -69,6 +120,7 @@ pub struct AnimeDetail {
     pub released: String,
     pub duration: String,
     pub kind: String,
+    pub country: String,
     pub released_on: String,
     pub updated_on: String,
     pub facts: Vec<InfoItem>,
@@ -90,6 +142,8 @@ pub struct EpisodeDetail {
     pub embed_url: String,
     pub source_url: String,
     pub servers: Vec<VideoServer>,
+    pub streams: Vec<StreamSource>,
+    pub qualities: Vec<QualityOption>,
     pub downloads: Vec<DownloadLink>,
     pub prev_slug: String,
     pub next_slug: String,
@@ -99,6 +153,9 @@ pub struct EpisodeDetail {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ScheduleDay {
     pub day: String,
+    pub weekday: String,
+    pub date_number: String,
+    pub month_short: String,
     pub id: String,
     pub is_today: bool,
     pub entries: Vec<Card>,
@@ -108,6 +165,7 @@ pub struct ScheduleDay {
 pub struct HomeData {
     pub latest: Vec<Card>,
     pub popular: Vec<Card>,
+    pub hero: Vec<HeroSlide>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

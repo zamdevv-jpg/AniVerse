@@ -3,5 +3,5 @@
 *.log
 *.keystore
 src-tauri/gen/android/app/signing.properties
-dist
+dist/
 .DS_Store

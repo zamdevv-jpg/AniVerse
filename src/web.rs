@@ -1,20 +1,21 @@
 use std::sync::Arc;
 
 use axum::{
+    body::Body,
     Json,
     extract::{Path, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::Query;
-use chrono::Datelike;
+use chrono::{Datelike, Duration as ChronoDuration, FixedOffset, NaiveDate, Utc};
 use minijinja::Environment;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
     artwork::ArtworkResolver,
-    models::{BrowseParams, BrowseQuery, encode, normalize_title_for_dedup},
+    models::{BrowseQuery, encode, normalize_title_for_dedup},
     source::Source,
 };
 
@@ -31,6 +32,17 @@ pub struct AppState {
     pub templates: Arc<Environment<'static>>,
     pub site: Site,
     pub artwork: Arc<ArtworkResolver>,
+    pub supabase_url: String,
+    pub supabase_anon_key: String,
+}
+
+fn escape_html_attribute(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\'', "&#39;")
 }
 
 fn base_ctx(state: &AppState, active: &str, title: &str, description: &str) -> Value {
@@ -41,6 +53,8 @@ fn base_ctx(state: &AppState, active: &str, title: &str, description: &str) -> V
         "meta_description": description,
         "active": active,
         "source_host": state.source.host(),
+        "supabase_url": escape_html_attribute(&state.supabase_url),
+        "supabase_anon_key": escape_html_attribute(&state.supabase_anon_key),
         "year": chrono::Utc::now().year(),
         "query": "",
     })
@@ -70,7 +84,7 @@ fn render(state: &AppState, template: &str, ctx: &Value, status: StatusCode) -> 
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Html(format!(
                     "<!doctype html><meta charset=\"utf-8\"><title>Kesalahan render</title>\
-                     <body style=\"font-family:system-ui;background:#08080b;color:#eee;padding:40px\">\
+                     <body style=\"font-family:system-ui;background:#0b0b0d;color:#eee;padding:40px\">\
                      <h1>Kesalahan render</h1><pre style=\"white-space:pre-wrap;color:#f99\">{error}</pre></body>"
                 )),
             )
@@ -93,74 +107,24 @@ fn error_page(state: &AppState, status: StatusCode, title: &str, message: &str) 
 }
 
 pub async fn home(State(state): State<AppState>) -> Response {
-    let browse_ongoing = BrowseParams {
-        status: "Ongoing".into(),
-        order: "update".into(),
-        ..Default::default()
-    };
-    let browse_completed = BrowseParams {
-        status: "Completed".into(),
-        order: "update".into(),
-        ..Default::default()
-    };
-
-    let (home_result, ongoing_result, completed_result, schedule_result) = tokio::join!(
-        state.source.home(),
-        state.source.browse(&browse_ongoing),
-        state.source.browse(&browse_completed),
-        state.source.schedule()
-    );
-
-    let (latest, popular) = match home_result {
-        Ok(home) => (home.latest, home.popular),
-        Err(error) => {
-            tracing::error!(%error, "gagal memuat beranda");
-            (Vec::new(), Vec::new())
-        }
-    };
-
-    let ongoing = ongoing_result.map(|page| page.cards).unwrap_or_else(|error| {
-        tracing::warn!(%error, "gagal memuat ongoing");
-        Vec::new()
-    });
-    let completed = completed_result
-        .map(|page| page.cards)
-        .unwrap_or_else(|error| {
-            tracing::warn!(%error, "gagal memuat completed");
-            Vec::new()
-        });
-    let schedule = schedule_result.unwrap_or_else(|error| {
-        tracing::warn!(%error, "gagal memuat jadwal");
-        Vec::new()
+    let home = state.source.home().await.unwrap_or_else(|error| {
+        tracing::error!(%error, "gagal memuat beranda Nimegami");
+        crate::models::HomeData::default()
     });
 
-    let source_error = latest.is_empty() && popular.is_empty();
-    let hero: Vec<_> = latest.iter().take(6).cloned().collect();
-    let today = schedule.iter().find(|day| day.is_today).cloned();
+    let source_error = home.latest.is_empty() && home.hero.is_empty();
+    let genres = state.source.genres().await.unwrap_or_default();
 
     let mut ctx = with(
         &state,
         "home",
-        &format!(
-            "{} — Nonton Anime Sub Indo Gratis",
-            state.site.name
-        ),
+        &format!("{} — Nonton Anime Sub Indo Gratis", state.site.name),
         &state.site.description,
     );
-    insert(&mut ctx, "hero", &hero);
-    insert(&mut ctx, "latest", latest.iter().take(18).collect::<Vec<_>>());
-    insert(&mut ctx, "popular", popular);
-    insert(
-        &mut ctx,
-        "ongoing",
-        ongoing.iter().take(12).collect::<Vec<_>>(),
-    );
-    insert(
-        &mut ctx,
-        "completed",
-        completed.iter().take(12).collect::<Vec<_>>(),
-    );
-    insert(&mut ctx, "today", &today);
+    insert(&mut ctx, "hero", &home.hero);
+    insert(&mut ctx, "genres", &genres);
+    insert(&mut ctx, "latest", home.latest.iter().take(18).collect::<Vec<_>>());
+    insert(&mut ctx, "popular", home.popular.iter().take(10).collect::<Vec<_>>());
     insert(&mut ctx, "source_error", source_error);
 
     render(&state, "index.html", &ctx, StatusCode::OK)
@@ -181,7 +145,7 @@ pub async fn browse(
                 &state,
                 StatusCode::BAD_GATEWAY,
                 "Sumber sedang tidak bisa diakses",
-                "Katalog anime belum dapat dimuat dari Otakudesu. Coba lagi beberapa saat lagi.",
+                "Katalog anime belum dapat dimuat dari Nimegami. Coba lagi beberapa saat lagi.",
             );
         }
     };
@@ -195,7 +159,7 @@ pub async fn browse(
     let description = if is_search {
         format!("Hasil pencarian anime “{}” subtitle Indonesia.", params.q)
     } else {
-        "Jelajahi katalog anime subtitle Indonesia: ongoing, completed, movie, dan genre pilihan.".to_string()
+        "Jelajahi katalog anime subtitle Indonesia dari Nimegami.".to_string()
     };
 
     let mut ctx = with(&state, "browse", &title, &description);
@@ -209,21 +173,9 @@ pub async fn browse(
     insert(
         &mut ctx,
         "prev_url",
-        if page.page > 1 {
-            params.web_url(page.page - 1)
-        } else {
-            String::new()
-        },
+        params.web_url(page.page.saturating_sub(1).max(1)),
     );
-    insert(
-        &mut ctx,
-        "next_url",
-        if page.has_next {
-            params.web_url(page.page + 1)
-        } else {
-            String::new()
-        },
-    );
+    insert(&mut ctx, "next_url", params.web_url(page.page + 1));
     insert(&mut ctx, "is_search", is_search);
 
     render(&state, "browse.html", &ctx, StatusCode::OK)
@@ -233,7 +185,7 @@ pub async fn anime_detail(
     State(state): State<AppState>,
     Path(slug): Path<String>,
 ) -> Response {
-    let mut detail = match state.source.detail(&slug).await {
+    let detail = match state.source.detail(&slug).await {
         Ok(detail) => detail,
         Err(error) => {
             tracing::warn!(%error, slug, "gagal memuat detail anime");
@@ -245,20 +197,11 @@ pub async fn anime_detail(
                 if is_adult {
                     "Anime ini diblokir dan tidak dapat diakses karena mengandung konten 18+ / dewasa."
                 } else {
-                    "Judul ini tidak tersedia di sumber, atau halaman sumber sedang bermasalah."
+                    "Judul ini tidak tersedia di Nimegami, atau halaman sumber sedang bermasalah."
                 },
             );
         }
     };
-
-    // Smart Anime Artwork Resolver (HD cover and banner)
-    let artwork = state.artwork.resolve(&detail.title, &detail.image).await;
-    if !artwork.poster.is_empty() && artwork.score >= 45 {
-        detail.image = artwork.poster;
-    }
-    if !artwork.banner.is_empty() {
-        detail.banner_image = artwork.banner;
-    }
 
     let latest_episode = detail.episodes.first().cloned();
     let first_episode = detail.episodes.last().cloned();
@@ -273,6 +216,14 @@ pub async fn anime_detail(
     insert(&mut ctx, "detail", &detail);
     insert(&mut ctx, "latest_episode", &latest_episode);
     insert(&mut ctx, "first_episode", &first_episode);
+
+    let recommended = state
+        .source
+        .home()
+        .await
+        .map(|home| home.latest.into_iter().take(12).collect::<Vec<_>>())
+        .unwrap_or_default();
+    insert(&mut ctx, "recommended", &recommended);
 
     render(&state, "anime.html", &ctx, StatusCode::OK)
 }
@@ -290,49 +241,34 @@ pub async fn watch(State(state): State<AppState>, Path(slug): Path<String>) -> R
                 if is_adult {
                     "Episode ini diblokir dan tidak dapat diakses karena mengandung konten 18+ / dewasa."
                 } else {
-                    "Episode ini tidak tersedia di sumber, atau halaman sumber sedang bermasalah."
+                    "Episode ini tidak tersedia di Nimegami, atau halaman sumber sedang bermasalah."
                 },
             );
         }
     };
 
-    let series = if episode.series_slug.is_empty() {
-        None
-    } else {
-        match state.source.detail(&episode.series_slug).await {
-            Ok(detail) => Some(detail),
-            Err(error) => {
-                let message = error.to_string().to_lowercase();
-                if message.contains("18+")
-                    || message.contains("dewasa")
-                    || message.contains("hentai")
-                    || message.contains("erotica")
-                {
-                    return error_page(
-                        &state,
-                        StatusCode::FORBIDDEN,
-                        "Konten 18+ Diblokir",
-                        "Episode ini diblokir dan tidak dapat diakses karena mengandung genre dewasa.",
-                    );
-                }
-                None
-            }
+    let series = match state.source.detail(&episode.series_slug).await {
+        Ok(detail) => Some(detail),
+        Err(error) => {
+            tracing::warn!(%error, "gagal memuat seri untuk halaman tonton");
+            None
         }
     };
 
-    let title = format!(
-        "Nonton {} — {}",
-        episode.title,
-        state.site.name
-    );
+    let title = format!("Nonton {} — {}", episode.title, state.site.name);
     let description = format!(
-        "Streaming {} subtitle Indonesia. Pilih server video yang tersedia.",
+        "Streaming {} subtitle Indonesia. Kualitas otomatis dan sumber yang tidak tersedia dinonaktifkan.",
         episode.title
     );
+
+    let streams_json = serde_json::to_string(&episode.streams).unwrap_or_else(|_| "[]".into());
+    let available_qualities = episode.qualities.iter().filter(|q| q.available).count();
 
     let mut ctx = with(&state, "browse", &title, &description);
     insert(&mut ctx, "episode", &episode);
     insert(&mut ctx, "series", &series);
+    insert(&mut ctx, "streams_json", streams_json);
+    insert(&mut ctx, "available_qualities", available_qualities);
     insert(
         &mut ctx,
         "prev_url",
@@ -355,27 +291,58 @@ pub async fn watch(State(state): State<AppState>, Path(slug): Path<String>) -> R
     render(&state, "watch.html", &ctx, StatusCode::OK)
 }
 
-pub async fn schedule(State(state): State<AppState>) -> Response {
-    let days = state.source.schedule().await.unwrap_or_else(|error| {
-        tracing::warn!(%error, "gagal memuat jadwal");
+#[derive(Deserialize, Default)]
+pub struct ScheduleQuery {
+    pub week: Option<String>,
+}
+
+pub async fn schedule(
+    State(state): State<AppState>,
+    Query(query): Query<ScheduleQuery>,
+) -> Response {
+    let jakarta = FixedOffset::east_opt(7 * 60 * 60).expect("offset WIB valid");
+    let today = Utc::now().with_timezone(&jakarta).date_naive();
+    let requested = query
+        .week
+        .as_deref()
+        .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
+        .unwrap_or(today);
+    let week_start = requested
+        - ChronoDuration::days(requested.weekday().num_days_from_monday() as i64);
+    let week_end = week_start + ChronoDuration::days(6);
+
+    let days = state.source.schedule(week_start).await.unwrap_or_else(|error| {
+        tracing::warn!(%error, "gagal memuat jadwal MyAnimeList");
         Vec::new()
     });
 
     let mut ctx = with(
         &state,
         "schedule",
-        &format!("Jadwal Rilis Anime — {}", state.site.name),
-        "Jadwal rilis anime mingguan subtitle Indonesia berdasarkan hari.",
+        &format!("Jadwal Anime Mingguan — {}", state.site.name),
+        "Jadwal anime mingguan dari MyAnimeList, dikelompokkan menurut tanggal.",
     );
     insert(&mut ctx, "days", &days);
     insert(&mut ctx, "empty", days.is_empty());
+    insert(&mut ctx, "week_label", format!("{} – {}", indonesian_date(week_start), indonesian_date(week_end)));
+    insert(&mut ctx, "week_start", week_start.format("%Y-%m-%d").to_string());
+    insert(&mut ctx, "previous_week", (week_start - ChronoDuration::days(7)).format("%Y-%m-%d").to_string());
+    insert(&mut ctx, "next_week", (week_start + ChronoDuration::days(7)).format("%Y-%m-%d").to_string());
 
     render(&state, "schedule.html", &ctx, StatusCode::OK)
 }
 
+fn indonesian_date(date: NaiveDate) -> String {
+    const MONTHS: [&str; 12] = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus",
+        "September", "Oktober", "November", "Desember",
+    ];
+    format!("{} {} {}", date.day(), MONTHS[date.month0() as usize], date.year())
+}
+
 #[derive(Deserialize)]
 pub struct ScheduleAnimeQuery {
-    title: String,
+    pub title: String,
 }
 
 pub async fn schedule_anime(
@@ -387,37 +354,11 @@ pub async fn schedule_anime(
         return Redirect::to("/anime").into_response();
     }
     let wanted = normalize_title_for_dedup(title);
-
-    let nimegami = state
-        .source
-        .nimegami
-        .search(title, 10)
-        .await
-        .unwrap_or_default();
-    if let Some(card) = nimegami
+    let results = state.source.search(title, 10).await.unwrap_or_default();
+    if let Some(card) = results
         .iter()
         .find(|card| normalize_title_for_dedup(&card.title) == wanted)
-    {
-        return Redirect::to(&card.href).into_response();
-    }
-
-    let doronime = state
-        .source
-        .doronime
-        .search(title, 10)
-        .await
-        .unwrap_or_default();
-    if let Some(card) = doronime
-        .iter()
-        .find(|card| normalize_title_for_dedup(&card.title) == wanted)
-    {
-        return Redirect::to(&card.href).into_response();
-    }
-
-    let fallback = state.source.search(title, 10).await.unwrap_or_default();
-    if let Some(card) = fallback
-        .iter()
-        .find(|card| normalize_title_for_dedup(&card.title) == wanted)
+        .or_else(|| results.first())
     {
         return Redirect::to(&card.href).into_response();
     }
@@ -436,7 +377,7 @@ pub async fn search_page(
         (
             state
                 .source
-                .search(&q, 30)
+                .search(&q, 40)
                 .await
                 .unwrap_or_else(|error| {
                     tracing::warn!(%error, "gagal mencari");
@@ -506,6 +447,83 @@ pub async fn api_search(
         .into_response()
 }
 
+/// Endpoint ringan untuk memeriksa ulang sumber video tanpa memuat halaman.
+pub async fn api_streams(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Response {
+    match state.source.episode(&slug).await {
+        Ok(episode) => (
+            [(header::CACHE_CONTROL, "no-store")],
+            Json(json!({
+                "slug": episode.slug,
+                "streams": episode.streams,
+                "qualities": episode.qualities,
+            })),
+        )
+            .into_response(),
+        Err(error) => {
+            tracing::warn!(%error, slug, "gagal memuat sumber video");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": "Sumber video belum bisa dimuat" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct VideoProxyQuery {
+    pub url: String,
+}
+
+pub async fn api_video(
+    State(state): State<AppState>,
+    Query(query): Query<VideoProxyQuery>,
+    request_headers: HeaderMap,
+) -> Response {
+    let allowed = reqwest::Url::parse(&query.url)
+        .ok()
+        .filter(|url| {
+            let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+            url.scheme() == "https"
+                && url.port_or_known_default() == Some(443)
+                && (host == "berkasdrive.com" || host.ends_with(".berkasdrive.com"))
+        })
+        .is_some();
+    if !allowed {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    let range = request_headers
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok());
+    let upstream = match state.source.nimegami().proxy_video(&query.url, range).await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::warn!(%error, "gagal memproksi video dari Berkasdrive");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+
+    let status = upstream.status();
+    let mut response = Response::builder().status(status);
+    for name in [
+        header::CONTENT_TYPE,
+        header::CONTENT_LENGTH,
+        header::CONTENT_RANGE,
+        header::ACCEPT_RANGES,
+    ] {
+        if let Some(value) = upstream.headers().get(&name) {
+            response = response.header(name, value);
+        }
+    }
+    response
+        .body(Body::from_stream(upstream.bytes_stream()))
+        .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response())
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ArtworkQuery {
     pub title: Option<String>,
@@ -560,8 +578,19 @@ pub async fn bookmarks(State(state): State<AppState>) -> Response {
     render(&state, "bookmark.html", &ctx, StatusCode::OK)
 }
 
-fn local_feature_page(state: &AppState, active: &str, template: &str, title: &str, description: &str) -> Response {
-    let ctx = with(state, active, &format!("{title} — {}", state.site.name), description);
+fn local_feature_page(
+    state: &AppState,
+    active: &str,
+    template: &str,
+    title: &str,
+    description: &str,
+) -> Response {
+    let ctx = with(
+        state,
+        active,
+        &format!("{title} — {}", state.site.name),
+        description,
+    );
     render(state, template, &ctx, StatusCode::OK)
 }
 
@@ -575,16 +604,44 @@ pub async fn account(State(state): State<AppState>) -> Response {
     )
 }
 
+pub async fn uploads_page(State(state): State<AppState>) -> Response {
+    let ctx = with(
+        &state,
+        "uploads",
+        &format!("Unggah Anime — {}", state.site.name),
+        "Unggah poster dan episode ke koleksi AniVerse menggunakan Supabase Storage.",
+    );
+    render(&state, "uploads.html", &ctx, StatusCode::OK)
+}
+
 pub async fn history_page(State(state): State<AppState>) -> Response {
-    local_feature_page(&state, "history", "history.html", "Histori tontonan", "Lanjutkan anime yang terakhir kamu tonton.")
+    local_feature_page(
+        &state,
+        "history",
+        "history.html",
+        "Histori tontonan",
+        "Lanjutkan anime yang terakhir kamu tonton.",
+    )
 }
 
 pub async fn downloads_page(State(state): State<AppState>) -> Response {
-    local_feature_page(&state, "downloads", "downloads.html", "Unduhan", "Tautan unduhan episode yang disimpan di perangkat ini.")
+    local_feature_page(
+        &state,
+        "downloads",
+        "downloads.html",
+        "Unduhan",
+        "Tautan unduhan episode yang disimpan di perangkat ini.",
+    )
 }
 
 pub async fn offline_page(State(state): State<AppState>) -> Response {
-    local_feature_page(&state, "offline", "offline.html", "Tersimpan offline", "Halaman detail anime yang disimpan untuk dibuka tanpa internet.")
+    local_feature_page(
+        &state,
+        "offline",
+        "offline.html",
+        "Tersimpan offline",
+        "Halaman detail anime yang disimpan untuk dibuka tanpa internet.",
+    )
 }
 
 pub async fn not_found(State(state): State<AppState>) -> Response {

@@ -1,65 +1,107 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-hero account-hero">
-  <div class="page-hero-copy">
-    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg> AniVerse</span>
-    <h1>Akun kamu</h1>
-    <p>Masuk untuk menyimpan profil dan komentar di perangkat ini.</p>
+<div class="account-profile-page">
+  <div class="account-profile-topbar">
+    <a class="account-profile-back" href="/" aria-label="Kembali ke beranda">
+      <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+    </a>
+    <span>Profil pengguna</span>
+    <button class="account-logout" id="google-logout" type="button" hidden>Keluar</button>
   </div>
-</section>
 
-<section class="account-layout section-first">
-  <div class="panel account-auth" id="account-auth">
-    <div class="auth-heading">
-      <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg></span>
-      <h2 id="auth-title">Masuk ke AniVerse</h2>
-      <p id="auth-subtitle">Gunakan akun lokal di perangkat ini untuk menyimpan aktivitasmu.</p>
+  <section class="profile-overview" id="account-profile">
+    <div class="profile-avatar-control">
+      <div class="profile-avatar" id="profile-avatar">T</div>
+      <button class="profile-avatar-edit" id="profile-avatar-edit" type="button" aria-label="Pilih foto profil" hidden>
+        <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7.5h3l1.5-2h7l1.5 2h3a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 19.5H4A1.5 1.5 0 0 1 2.5 18V9A1.5 1.5 0 0 1 4 7.5Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      </button>
     </div>
+    <span class="profile-user-badge" id="profile-user-badge" hidden>Anggota AniVerse</span>
+    <h1 id="profile-name">Tamu</h1>
+    <p id="profile-email">Masuk dengan Google untuk mengatur profil dan berkomentar.</p>
+    <button class="btn btn-ghost btn-sm profile-edit-toggle" id="profile-edit-toggle" type="button" aria-expanded="false" aria-controls="profile-settings-form" hidden>Edit profil</button>
 
-    <form id="login-form" class="auth-form" autocomplete="on">
-      <label>Email<input type="email" name="email" autocomplete="username" required maxlength="120"></label>
-      <label>Kata sandi<input type="password" name="password" autocomplete="current-password" required minlength="8"></label>
-      <button class="btn btn-gold btn-lg" type="submit">Masuk</button>
-      <p class="auth-switch">Belum punya akun? <button class="text-btn" type="button" data-auth-switch="register">Buat akun</button></p>
+    <form class="profile-edit-form" id="profile-settings-form" hidden>
+      <label for="profile-display-name">Nama profil</label>
+      <input id="profile-display-name" name="display_name" maxlength="40" required placeholder="Nama yang terlihat orang lain">
+      <div class="profile-photo-row">
+        <input id="profile-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        <button class="btn btn-ghost btn-sm" id="profile-photo-choose" type="button">Pilih foto</button>
+        <span id="profile-photo-name">Foto profil saat ini</span>
+      </div>
+      <small class="profile-edit-hint">JPG, PNG, atau WebP · Maksimal 2 MB</small>
+      <div class="profile-edit-actions">
+        <button class="btn btn-ghost btn-sm" id="profile-edit-cancel" type="button">Batal</button>
+        <button class="btn btn-gold btn-sm" id="profile-settings-save" type="submit">Simpan perubahan</button>
+      </div>
+      <small id="profile-settings-status" aria-live="polite"></small>
     </form>
+  </section>
 
-    <form id="register-form" class="auth-form" autocomplete="on" hidden>
-      <label>Nama tampilan<input type="text" name="name" autocomplete="nickname" required minlength="2" maxlength="32"></label>
-      <label>Email<input type="email" name="email" autocomplete="email" required maxlength="120"></label>
-      <label>Kata sandi<input type="password" name="password" autocomplete="new-password" required minlength="8"></label>
-      <button class="btn btn-gold btn-lg" type="submit">Buat akun lokal</button>
-      <p class="auth-switch">Sudah punya akun? <button class="text-btn" type="button" data-auth-switch="login">Masuk</button></p>
-    </form>
+  <section class="supabase-auth-card" id="supabase-auth-card" aria-labelledby="google-auth-title">
+    <div>
+      <h2 id="google-auth-title">Akun cloud</h2>
+      <p id="google-auth-status">Masuk dengan Google untuk menghubungkan akun AniVerse.</p>
+    </div>
+    <div class="supabase-auth-actions">
+      <button class="btn btn-gold btn-sm" id="google-login" type="button">
+        <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg> Masuk dengan Google
+      </button>
+    </div>
+  </section>
 
-    <p class="local-account-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg> Data akun tersimpan di perangkat ini dan belum tersinkron ke perangkat lain.</p>
-  </div>
+  <section class="profile-stats" aria-label="Statistik profil">
+    <a class="profile-stat" href="/histori">
+      <strong id="profile-history-count">0</strong>
+      <span>Episode ditonton</span>
+    </a>
+    <a class="profile-stat" href="/bookmark">
+      <strong id="profile-bookmark-count">0</strong>
+      <span>Bookmark</span>
+    </a>
+    <div class="profile-stat">
+      <strong id="profile-comment-count">0</strong>
+      <span>Komentar</span>
+    </div>
+  </section>
 
-  <div class="panel account-profile" id="account-profile" hidden>
-    <div class="profile-cover"></div>
-    <div class="profile-heading">
-      <span class="profile-avatar" id="profile-avatar">A</span>
-      <div><h2 id="profile-name">AniVerse</h2><p id="profile-email"></p></div>
-      <button class="btn btn-ghost btn-sm" type="button" id="logout-button">Keluar</button>
+  <section class="detail-section profile-activity-section">
+    <div class="section-head">
+      <h2 class="section-title">Aktivitas</h2>
+      <div class="tabs profile-activity-tabs" role="tablist" aria-label="Jenis aktivitas">
+        <button class="tab is-active" type="button" data-account-tab="all">Semua</button>
+        <button class="tab" type="button" data-account-tab="comments">Komentar</button>
+        <button class="tab" type="button" data-account-tab="history">Riwayat</button>
+      </div>
     </div>
-    <div class="profile-stats">
-      <a href="/histori"><strong id="profile-history-count">0</strong><span>ditonton</span></a>
-      <a href="#profile-activity" data-account-tab-link="comments"><strong id="profile-comment-count">0</strong><span>komentar</span></a>
-      <a href="/bookmark"><strong id="profile-bookmark-count">0</strong><span>bookmark</span></a>
-    </div>
-    <div class="profile-tabs" id="profile-activity">
-      <button class="is-active" type="button" data-account-tab="all">Semua</button>
-      <button type="button" data-account-tab="comments">Komentar</button>
-      <button type="button" data-account-tab="history">Histori</button>
-    </div>
-    <div class="profile-activity-list" id="profile-activity-list"></div>
-    <nav class="profile-links" aria-label="Menu akun">
-      <a href="/histori"><svg class="icon"><use href="#i-clock"/></svg> Histori tontonan <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
-      <a href="/bookmark"><svg class="icon"><use href="#i-bookmark"/></svg> Bookmark <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
-      <a href="/unduhan"><svg class="icon"><use href="#i-download"/></svg> Daftar unduhan <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
-      <a href="/offline"><svg class="icon"><use href="#i-device"/></svg> Tersimpan offline <svg class="icon link-arrow"><use href="#i-chevron-right"/></svg></a>
-    </nav>
-    <p class="local-account-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg> Komentar, akun, dan aktivitas ini hanya tersedia di perangkat ini.</p>
-  </div>
-</section>
+    <div class="profile-activity" id="profile-activity-list"></div>
+  </section>
+
+  <details class="account-shortcuts">
+    <summary>Menu lainnya</summary>
+    <section class="menu-list" aria-label="Menu akun">
+      <a class="menu-row" href="/unduhan">
+        <span class="menu-icon"><svg class="icon"><use href="#i-download"/></svg></span>
+        <span class="menu-body"><strong>Unduhan</strong><small>Tautan unduhan tersimpan</small></span>
+        <svg class="icon menu-chevron"><use href="#i-chevron-right"/></svg>
+      </a>
+      <a class="menu-row" href="/offline">
+        <span class="menu-icon"><svg class="icon"><use href="#i-device"/></svg></span>
+        <span class="menu-body"><strong>Tersimpan offline</strong><small>Halaman detail tanpa internet</small></span>
+        <svg class="icon menu-chevron"><use href="#i-chevron-right"/></svg>
+      </a>
+      <a class="menu-row" href="/jadwal">
+        <span class="menu-icon"><svg class="icon"><use href="#i-calendar"/></svg></span>
+        <span class="menu-body"><strong>Jadwal update</strong><small>Rilisan terbaru per hari</small></span>
+        <svg class="icon menu-chevron"><use href="#i-chevron-right"/></svg>
+      </a>
+      <a class="menu-row" href="/unggahan">
+        <span class="menu-icon"><svg class="icon"><use href="#i-upload"/></svg></span>
+        <span class="menu-body"><strong>Unggah anime</strong><small>Kelola episode di Supabase</small></span>
+        <svg class="icon menu-chevron"><use href="#i-chevron-right"/></svg>
+      </a>
+    </section>
+  </details>
+</div>
 {% endblock %}

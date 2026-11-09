@@ -36,6 +36,7 @@ pub const EMBEDDED_TEMPLATES: &[(&str, &str)] = &[
     ("schedule.html", include_str!("../templates/schedule.html")),
     ("search.html", include_str!("../templates/search.html")),
     ("watch.html", include_str!("../templates/watch.html")),
+    ("uploads.html", include_str!("../templates/uploads.html")),
     ("partials/card.html", include_str!("../templates/partials/card.html")),
     ("partials/footer.html", include_str!("../templates/partials/footer.html")),
     ("partials/header.html", include_str!("../templates/partials/header.html")),
@@ -47,10 +48,11 @@ pub const EMBEDDED_STATIC: &[(&str, &str, &[u8])] = &[
     ("favicon.svg", "image/svg+xml", include_bytes!("../static/favicon.svg")),
     ("css/style.css", "text/css", include_bytes!("../static/css/style.css")),
     ("js/app.js", "application/javascript", include_bytes!("../static/js/app.js")),
+    ("js/supabase.js", "application/javascript", include_bytes!("../static/js/supabase.js")),
     ("js/logo.png", "image/png", include_bytes!("../static/js/logo.png")),
 ];
 
-pub fn create_template_env() -> Environment<'static> {
+pub fn create_template_env(base_url: &str) -> Environment<'static> {
     let mut templates = Environment::new();
     let disk_templates = PathBuf::from("templates");
     if disk_templates.exists() && disk_templates.is_dir() {
@@ -67,11 +69,13 @@ pub fn create_template_env() -> Environment<'static> {
     }
 
     templates.set_undefined_behavior(minijinja::UndefinedBehavior::Lenient);
-    templates.add_filter("backdrop", |value: String| {
-        source::resize_image(&value, 1000, 1450)
+    let backdrop_base = base_url.to_string();
+    templates.add_filter("backdrop", move |value: String| {
+        source::resize_image(&value, 1080, 1450, &backdrop_base)
     });
-    templates.add_filter("poster", |value: String| {
-        source::resize_image(&value, 420, 620)
+    let poster_base = base_url.to_string();
+    templates.add_filter("poster", move |value: String| {
+        source::resize_image(&value, 384, 620, &poster_base)
     });
     templates.add_filter("initial", |value: String| {
         value
@@ -93,18 +97,18 @@ pub async fn build_app(
 ) -> anyhow::Result<Router> {
     dotenvy::dotenv().ok();
 
-    let base_url = std::env::var("OTAKUDESU_BASE_URL")
-        .unwrap_or_else(|_| "https://otakudesu.or.at".to_string());
+    let base_url = std::env::var("NIMEGAMI_BASE_URL")
+        .unwrap_or_else(|_| "https://nimegami.id".to_string());
     let site_name = std::env::var("SITE_NAME").unwrap_or_else(|_| "AniVerse".to_string());
     let tagline = std::env::var("SITE_TAGLINE")
         .unwrap_or_else(|_| "Nonton anime sub indo, update tiap hari.".to_string());
     let description = std::env::var("SITE_DESCRIPTION").unwrap_or_else(|_| {
-        "AniVerse adalah katalog streaming anime subtitle Indonesia. Data dan video berasal dari pihak ketiga."
+        "AniVerse adalah katalog streaming anime subtitle Indonesia dengan data dari Nimegami."
             .to_string()
     });
 
     let source = Source::new(base_url.clone()).context("gagal menyiapkan HTTP client")?;
-    let templates = create_template_env();
+    let templates = create_template_env(&base_url);
 
     let data_dir = custom_data_dir.unwrap_or_else(|| {
         std::env::var("DATA_DIR")
@@ -123,6 +127,16 @@ pub async fn build_app(
             description,
         },
         artwork: Arc::new(artwork),
+        supabase_url: std::env::var("SUPABASE_URL")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| option_env!("SUPABASE_URL").map(str::to_owned))
+            .unwrap_or_default(),
+        supabase_anon_key: std::env::var("SUPABASE_ANON_KEY")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| option_env!("SUPABASE_ANON_KEY").map(str::to_owned))
+            .unwrap_or_default(),
     };
 
     let static_dir = custom_static_dir.unwrap_or_else(|| {
@@ -139,11 +153,14 @@ pub async fn build_app(
         .route("/bookmark", get(web::bookmarks))
         .route("/jadwal/anime", get(web::schedule_anime))
         .route("/akun", get(web::account))
+        .route("/unggahan", get(web::uploads_page))
         .route("/histori", get(web::history_page))
         .route("/unduhan", get(web::downloads_page))
         .route("/offline", get(web::offline_page))
         .route("/acak", get(web::random))
         .route("/api/search", get(web::api_search))
+        .route("/api/streams/{slug}", get(web::api_streams))
+        .route("/api/video", get(web::api_video))
         .route("/api/artwork", get(web::api_artwork))
         .route("/service-worker.js", get(serve_service_worker))
         .route("/healthz", get(web::health))

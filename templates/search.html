@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% from "partials/card.html" import poster_card %}
+{% from "partials/card.html" import poster_card, list_card %}
 
 {% block content %}
 <section class="search-hero">
   <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> Pencarian</span>
   <h1>Cari anime apa hari ini?</h1>
-  <p>Ketik judul, potongan judul, atau kata kunci. Pencarian langsung terhubung ke {{ source_host }}.</p>
+  <p>Ketik judul atau kata kunci. Hasil diambil langsung dari {{ source_host }}.</p>
 
-  <form class="search-hero-form" action="/cari" method="get" role="search" autocomplete="off">
+  <form class="search-big-form" action="/cari" method="get" role="search" autocomplete="off">
     <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
     <input type="search" name="q" value="{{ query }}" placeholder="Contoh: one piece, jujutsu, romance..." aria-label="Cari anime" autofocus>
     <button class="btn btn-gold" type="submit">Cari</button>
@@ -15,40 +15,57 @@
 </section>
 
 {% if has_query %}
-<section class="section section-first">
+<section class="section">
   <div class="section-head">
     <div>
-      <span class="eyebrow">Hasil pencarian</span>
-      <h2>“{{ query }}”</h2>
+      <h2 class="section-title">Hasil untuk “{{ query }}”</h2>
+      <p class="section-sub">{{ result_count }} judul ditemukan</p>
     </div>
-    <span class="pill">{{ result_count }} judul</span>
+    <a class="section-link" href="/anime?q={{ query|urlencode }}">Buka di katalog <svg class="icon"><use href="#i-chevron-right"/></svg></a>
   </div>
 
   {% if results|length > 0 %}
-  <div class="poster-grid search-results-grid">
-    {% for card in results %}{{ poster_card(card) }}{% endfor %}
+  <div class="list-stack">
+    {% for card in results %}
+    {{ list_card(card) }}
+    {% endfor %}
   </div>
   {% else %}
   <div class="empty-state">
     <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
-    <h3>Tidak ditemukan</h3>
-    <p>Coba ejaan lain, gunakan judul Jepang, atau cari lebih singkat.</p>
+    <h3>Tidak ada hasil</h3>
+    <p>Coba ejaan lain, potongan judul, atau genre yang lebih umum.</p>
     <a class="btn btn-gold" href="/anime">Jelajahi katalog</a>
   </div>
   {% endif %}
 </section>
 {% else %}
+{% if genres|length > 0 %}
+<section class="section">
+  <div class="section-head">
+    <h2 class="section-title">Telusuri genre</h2>
+  </div>
+  <div class="chip-strip chip-wrap">
+    {% for genre in genres %}
+    <a class="chip" href="{{ genre.href }}">{{ genre.name }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if recommended|length > 0 %}
-<section class="section section-first">
+<section class="section">
   <div class="section-head">
     <div>
-      <span class="eyebrow"><svg class="icon fill" aria-hidden="true"><use href="#i-flame"/></svg> Lagi ramai</span>
-      <h2>Rilisan terbaru</h2>
+      <h2 class="section-title">Sedang update</h2>
+      <p class="section-sub">Mulai dari judul yang paling baru</p>
     </div>
-    <a class="see-all" href="/anime?order=update">Lihat semua <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+    <a class="section-link" href="/anime?order=update">Lihat semua <svg class="icon"><use href="#i-chevron-right"/></svg></a>
   </div>
   <div class="poster-grid">
-    {% for card in recommended %}{{ poster_card(card) }}{% endfor %}
+    {% for card in recommended %}
+    {{ poster_card(card) }}
+    {% endfor %}
   </div>
 </section>
 {% endif %}

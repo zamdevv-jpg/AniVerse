@@ -1,36 +1,34 @@
 <footer class="site-footer">
-  <div class="container footer-inner">
+  <div class="footer-inner">
     <div class="footer-brand">
       <a class="brand" href="/" aria-label="{{ site_name }} — beranda">
-        <img src="/static/js/logo.png" alt="{{ site_name }}" class="brand-logo">
+        <img class="footer-logo" src="/static/js/logo.png" alt="AniVerse">
       </a>
       <p>{{ site_tagline }}</p>
       <p class="footer-disclaimer">
-        Semua data dan video berasal dari pihak ketiga ({{ source_host }}). Situs ini tidak menyimpan
-        file video apa pun. Gunakan untuk keperluan pembelajaran dan hormati hak cipta.
+        Semua data dan video berasal dari {{ source_host }}. Situs ini tidak menyimpan file video.
+        Dukung industri anime dengan menonton lewat layanan resmi.
       </p>
     </div>
 
     <div class="footer-col">
       <h3>Jelajahi</h3>
-      <a href="/anime?order=update">Rilisan terbaru</a>
-      <a href="/anime?status=Ongoing&order=update">Anime ongoing</a>
-      <a href="/anime?status=Completed&order=rating">Anime completed</a>
-      <a href="/anime?type=Movie&order=popular">Movie populer</a>
-      <a href="/jadwal">Jadwal rilis</a>
+      <a href="/anime?order=update">Update terbaru</a>
+      <a href="/anime?order=popular">Lagi ramai</a>
+      <a href="/anime?type=Movie&order=popular">Movie</a>
+      <a href="/jadwal">Jadwal update</a>
     </div>
 
     <div class="footer-col">
-      <h3>Berguna</h3>
-      <a href="/cari">Pencarian</a>
-      <a href="/bookmark">Bookmark saya</a>
-      <a href="/acak">Anime acak</a>
-      <a href="/robots.txt">Robots</a>
+      <h3>Koleksi</h3>
+      <a href="/bookmark">Bookmark</a>
+      <a href="/histori">Riwayat tontonan</a>
+      <a href="/unduhan">Unduhan</a>
+      <a href="/akun">Akun</a>
     </div>
   </div>
 
-  <div class="container footer-bottom">
-    <span>© {{ year }} {{ site_name }}. Dibuat dengan Rust + Axum.</span>
-    <span class="footer-note">Bukan afiliasi resmi {{ source_host }}.</span>
+  <div class="footer-bottom">
+    <span>© {{ year }} AniVerse.</span>
   </div>
 </footer>

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head page-head-schedule">
+  <div class="page-head-copy">
+    <span class="eyebrow"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> Koleksi cloud</span>
+    <h1>Unggah anime</h1>
+    <p>Poster dan video episode disimpan di Supabase Storage. Pengunjung dapat menonton video yang sudah diunggah.</p>
+  </div>
+</section>
+
+<div class="upload-notice" id="supabase-config-missing" hidden>
+  <strong>Supabase belum dikonfigurasi.</strong>
+  <span>Isi SUPABASE_URL dan SUPABASE_ANON_KEY, lalu jalankan ulang aplikasi.</span>
+</div>
+
+<section class="upload-auth-card" id="upload-auth-required" hidden>
+  <h2>Masuk untuk mengunggah</h2>
+  <p>Gunakan akun Google yang sudah diberi akses pengelola.</p>
+  <button class="btn btn-gold" id="uploads-google-login" type="button">Masuk dengan Google</button>
+</section>
+
+<div class="upload-notice" id="upload-admin-denied" hidden>
+  <strong>Akun ini belum memiliki akses pengelola.</strong>
+  <span>Pengelola Supabase perlu memberi role admin pada akun Google Anda.</span>
+</div>
+
+<div class="upload-session-tools">
+  <button class="btn btn-ghost btn-sm" id="google-logout" type="button" hidden>Keluar dari Google</button>
+</div>
+
+<section class="upload-panel" id="upload-admin-panel" hidden>
+  <form id="upload-anime-form" class="upload-form">
+    <h2>Tambah episode</h2>
+    <label>Judul anime<input name="title" type="text" required maxlength="180" placeholder="Nama anime"></label>
+    <label>Nomor episode<input name="episode_number" type="text" required maxlength="24" placeholder="1"></label>
+    <label>Sinopsis<textarea name="synopsis" rows="3" maxlength="2000" placeholder="Sinopsis singkat"></textarea></label>
+    <label>Poster (opsional)<input name="poster" type="file" accept="image/jpeg,image/png,image/webp"></label>
+    <label>Video episode<input name="video" type="file" required accept="video/mp4,video/webm,video/quicktime"></label>
+    <p class="muted upload-help">Video besar diunggah bertahap agar bisa dilanjutkan jika koneksi terputus.</p>
+    <button class="btn btn-gold" type="submit" id="upload-submit">Unggah episode</button>
+    <p class="upload-progress" id="upload-progress" role="status" aria-live="polite"></p>
+  </form>
+</section>
+
+<section class="detail-section uploaded-library">
+  <div class="section-head">
+    <h2 class="section-title">Anime yang diunggah</h2>
+    <span class="pill" id="upload-count">0 episode</span>
+  </div>
+  <p class="muted" id="upload-list-status">Memuat koleksi cloud…</p>
+  <div class="uploaded-grid" id="uploaded-anime-list"></div>
+  <div class="uploaded-player" id="uploaded-player" hidden>
+    <div class="uploaded-player-head">
+      <h3 id="uploaded-player-title"></h3>
+      <button class="btn btn-ghost btn-sm" type="button" id="close-uploaded-player">Tutup</button>
+    </div>
+    <video id="uploaded-video" controls playsinline preload="metadata"></video>
+    <p id="uploaded-player-synopsis"></p>
+  </div>
+</section>
+{% endblock %}
