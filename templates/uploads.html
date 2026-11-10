@@ -22,7 +22,9 @@
 
 <div class="upload-notice" id="upload-admin-denied" hidden>
   <strong>Akun ini belum memiliki akses pengelola.</strong>
-  <span>Pengelola Supabase perlu memberi role admin pada akun Google Anda.</span>
+  <span>Pengelola Supabase perlu memberi role admin pada akun Google Anda. Hanya akun dengan role admin yang dapat mengunggah anime.</span>
+  <button class="btn btn-ghost btn-sm" id="refresh-admin-access" type="button">Perbarui akses</button>
+  <p class="upload-progress" id="upload-admin-status" role="status" aria-live="polite"></p>
 </div>
 
 <div class="upload-session-tools">

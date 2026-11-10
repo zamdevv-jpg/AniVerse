@@ -30,7 +30,7 @@
         <button class="btn btn-ghost btn-sm" id="profile-photo-choose" type="button">Pilih foto</button>
         <span id="profile-photo-name">Foto profil saat ini</span>
       </div>
-      <small class="profile-edit-hint">JPG, PNG, atau WebP · Maksimal 2 MB</small>
+      <small class="profile-edit-hint">JPG, PNG, atau WebP · Foto hingga 20 MB · Atur crop sebelum disimpan</small>
       <div class="profile-edit-actions">
         <button class="btn btn-ghost btn-sm" id="profile-edit-cancel" type="button">Batal</button>
         <button class="btn btn-gold btn-sm" id="profile-settings-save" type="submit">Simpan perubahan</button>
@@ -38,6 +38,23 @@
       <small id="profile-settings-status" aria-live="polite"></small>
     </form>
   </section>
+
+  <div class="avatar-crop-modal" id="profile-avatar-crop-modal" role="dialog" aria-modal="true" aria-labelledby="profile-avatar-crop-title" hidden>
+    <div class="avatar-crop-backdrop" data-avatar-crop-cancel></div>
+    <section class="avatar-crop-panel">
+      <h2 id="profile-avatar-crop-title">Atur foto profil</h2>
+      <p>Geser gambar untuk memilih bagian yang terlihat. Perbesar dengan penggeser.</p>
+      <div class="avatar-crop-frame">
+        <canvas id="profile-avatar-crop-canvas" width="320" height="320" aria-label="Pratinjau crop foto profil"></canvas>
+      </div>
+      <label for="profile-avatar-crop-zoom">Perbesar gambar</label>
+      <input id="profile-avatar-crop-zoom" type="range" min="1" max="3" step="0.01" value="1">
+      <div class="avatar-crop-actions">
+        <button class="btn btn-ghost btn-sm" type="button" data-avatar-crop-cancel>Batal</button>
+        <button class="btn btn-gold btn-sm" id="profile-avatar-crop-apply" type="button">Gunakan crop</button>
+      </div>
+    </section>
+  </div>
 
   <section class="supabase-auth-card" id="supabase-auth-card" aria-labelledby="google-auth-title">
     <div>
@@ -83,7 +100,7 @@
     <section class="menu-list" aria-label="Menu akun">
       <a class="menu-row" href="/unduhan">
         <span class="menu-icon"><svg class="icon"><use href="#i-download"/></svg></span>
-        <span class="menu-body"><strong>Unduhan</strong><small>Tautan unduhan tersimpan</small></span>
+        <span class="menu-body"><strong>Unduhan</strong><small>Video tersimpan di perangkat</small></span>
         <svg class="icon menu-chevron"><use href="#i-chevron-right"/></svg>
       </a>
       <a class="menu-row" href="/offline">
@@ -96,7 +113,7 @@
         <span class="menu-body"><strong>Jadwal update</strong><small>Rilisan terbaru per hari</small></span>
         <svg class="icon menu-chevron"><use href="#i-chevron-right"/></svg>
       </a>
-      <a class="menu-row" href="/unggahan">
+      <a class="menu-row" href="/unggahan" data-admin-only hidden>
         <span class="menu-icon"><svg class="icon"><use href="#i-upload"/></svg></span>
         <span class="menu-body"><strong>Unggah anime</strong><small>Kelola episode di Supabase</small></span>
         <svg class="icon menu-chevron"><use href="#i-chevron-right"/></svg>

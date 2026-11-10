@@ -136,6 +136,7 @@ pub struct EpisodeDetail {
     pub series_title: String,
     pub series_slug: String,
     pub series_image: String,
+    pub series_detail: AnimeDetail,
     pub episode_number: String,
     pub released: String,
     pub kind: String,

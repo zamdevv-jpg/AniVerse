@@ -103,7 +103,7 @@ pub async fn build_app(
     let tagline = std::env::var("SITE_TAGLINE")
         .unwrap_or_else(|_| "Nonton anime sub indo, update tiap hari.".to_string());
     let description = std::env::var("SITE_DESCRIPTION").unwrap_or_else(|_| {
-        "AniVerse adalah katalog streaming anime subtitle Indonesia dengan data dari Nimegami."
+        "AniVerse adalah katalog streaming anime subtitle Indonesia tanpa iklan dan open source."
             .to_string()
     });
 
@@ -138,6 +138,20 @@ pub async fn build_app(
             .or_else(|| option_env!("SUPABASE_ANON_KEY").map(str::to_owned))
             .unwrap_or_default(),
     };
+
+    // Hangatkan cache halaman utama di latar belakang supaya kunjungan pertama
+    // tidak menunggu semua pengambilan ke Nimegami selesai.
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let warm = state.source.clone();
+        handle.spawn(async move {
+            let params = crate::models::BrowseParams::default();
+            let _ = tokio::join!(
+                async { warm.home().await },
+                async { warm.genres().await },
+                async { warm.browse(&params).await },
+            );
+        });
+    }
 
     let static_dir = custom_static_dir.unwrap_or_else(|| {
         PathBuf::from(std::env::var("STATIC_DIR").unwrap_or_else(|_| "static".to_string()))

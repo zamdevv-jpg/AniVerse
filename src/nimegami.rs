@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::RwLock,
+    sync::{Arc, RwLock},
     time::{Duration as StdDuration, Instant},
 };
 
@@ -25,6 +25,15 @@ const HOME_TTL: StdDuration = StdDuration::from_secs(240);
 const HEALTH_TTL: StdDuration = StdDuration::from_secs(600);
 const PROBE_TIMEOUT: StdDuration = StdDuration::from_secs(6);
 
+/// Batas waktu total untuk mengambil popularitas MyAnimeList. Beranda tidak
+/// boleh menunggu API eksternal lebih lama dari ini; bila lewat, hero lokal
+/// yang dipakai supaya halaman tetap responsif.
+const MAL_BUDGET: StdDuration = StdDuration::from_secs(4);
+const MAL_CACHE_TTL: StdDuration = StdDuration::from_secs(6 * 60 * 60);
+const MAL_FAIL_TTL: StdDuration = StdDuration::from_secs(10 * 60);
+const MAL_CACHE_KEY: &str = "mal:top-anime:bypopularity:v3";
+const MAL_FAIL_KEY: &str = "mal:top-anime:bypopularity:fail:v1";
+
 /// Klien sumber data Nimegami. Semua halaman diambil sebagai HTML
 /// server-rendered lalu diurai menjadi model aplikasi.
 pub struct NimegamiSource {
@@ -34,17 +43,27 @@ pub struct NimegamiSource {
     client: reqwest::Client,
     proxy_client: reqwest::Client,
     mal_client: reqwest::Client,
-    cache: Cache,
-    health: RwLock<HashMap<String, (Instant, bool)>>,
+    cache: Arc<Cache>,
+    health: Arc<RwLock<HashMap<String, (Instant, bool)>>>,
+    /// Hasil parsing beranda disimpan sebentar karena halaman sumber cukup
+    /// besar dan diurai ulang pada setiap navigasi.
+    parsed_home: RwLock<Option<(Instant, ParsedHome)>>,
+    /// Snapshot kartu terbaru untuk rekomendasi instan tanpa jaringan.
+    recommend: RwLock<Option<(Instant, Vec<Card>)>>,
 }
+
+type ParsedHome = (Vec<Card>, Vec<Card>, Vec<HeroSlide>);
 
 impl NimegamiSource {
     pub fn new(base_url: impl Into<String>) -> Result<Self> {
         let base_url = base_url.into().trim_end_matches('/').to_string();
         let schedule_api_url = std::env::var("MAL_SCHEDULE_API")
             .unwrap_or_else(|_| "https://jikan.lucashdo.com/v1/schedules".to_string());
+        // `api.jikan.moe` sering diblokir dari jaringan Indonesia, jadi default
+        // memakai mirror yang sama dengan sumber jadwal. Nilainya tetap bisa
+        // ditimpa lewat env `MAL_TOP_API`.
         let mal_top_api_url = std::env::var("MAL_TOP_API")
-            .unwrap_or_else(|_| "https://api.jikan.moe/v4/top/anime".to_string());
+            .unwrap_or_else(|_| "https://jikan.lucashdo.com/v1/top/anime".to_string());
         let client = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .timeout(StdDuration::from_secs(25))
@@ -94,11 +113,13 @@ impl NimegamiSource {
                 .build()?,
             mal_client: reqwest::Client::builder()
                 .user_agent(USER_AGENT)
-                .timeout(StdDuration::from_secs(20))
-                .connect_timeout(StdDuration::from_secs(8))
+                .timeout(StdDuration::from_secs(8))
+                .connect_timeout(StdDuration::from_secs(4))
                 .build()?,
-            cache: Cache::default(),
-            health: RwLock::new(HashMap::new()),
+            cache: Arc::new(Cache::default()),
+            health: Arc::new(RwLock::new(HashMap::new())),
+            parsed_home: RwLock::new(None),
+            recommend: RwLock::new(None),
         })
     }
 
@@ -156,42 +177,47 @@ impl NimegamiSource {
             return Ok(body);
         }
 
+        // Halaman lama langsung dikirim, pembaruan berjalan di latar belakang.
+        // Dengan begitu membuka anime yang pernah dibuka terasa instan.
+        if let Some(body) = self.cache.stale(&key) {
+            self.refresh_html_in_background(key, path.to_string(), ttl);
+            return Ok(body);
+        }
+
         match self.fetch(path).await {
             Ok(body) => {
                 self.cache.put(key, body.clone(), ttl);
                 Ok(body)
             }
-            Err(error) => {
-                if let Some(stale) = self.cache.stale(&key) {
-                    tracing::warn!(path, %error, "sumber nimegami gagal, memakai cache lama");
-                    Ok(stale)
-                } else {
-                    Err(error)
-                }
-            }
+            Err(error) => Err(error),
         }
     }
 
-    async fn fetch(&self, path: &str) -> Result<String> {
-        let url = self.url(path);
-
-        match self.client.get(&url).send().await {
-            Ok(response) => {
-                let status = response.status();
-                if !status.is_success() {
-                    return Err(anyhow!("Nimegami mengembalikan HTTP {status} untuk {url}"));
-                }
-                let body = response
-                    .text()
-                    .await
-                    .map_err(|error| anyhow!("gagal membaca respons Nimegami: {error}"))?;
-                if body.trim().is_empty() {
-                    return Err(anyhow!("respons Nimegami kosong untuk {url}"));
-                }
-                Ok(body)
-            }
-            Err(error) => Err(anyhow!("tidak bisa menghubungi Nimegami: {error}")),
+    /// Memperbarui halaman di cache tanpa menahan permintaan pengguna.
+    fn refresh_html_in_background(&self, key: String, path: String, ttl: StdDuration) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        if !self.cache.begin_refresh(&key) {
+            return;
         }
+
+        let client = self.client.clone();
+        let url = self.url(&path);
+        let cache = self.cache.clone();
+        handle.spawn(async move {
+            match fetch_body(&client, &url).await {
+                Ok(body) => cache.put(key.clone(), body, ttl),
+                Err(error) => {
+                    tracing::debug!(path, %error, "gagal memperbarui cache nimegami");
+                }
+            }
+            cache.end_refresh(&key);
+        });
+    }
+
+    async fn fetch(&self, path: &str) -> Result<String> {
+        fetch_body(&self.client, &self.url(path)).await
     }
 
     /* ---------------------------------------------------------------------
@@ -199,16 +225,20 @@ impl NimegamiSource {
        --------------------------------------------------------------------- */
 
     pub async fn home(&self) -> Result<HomeData> {
-        let html = self.html("/", HOME_TTL).await?;
-        let (latest, mut popular, website_hero) = parse_home_html(&html, &self.base_url);
+        // Halaman Nimegami dan daftar popularitas MAL diambil bersamaan agar
+        // beranda tidak menunggu dua jaringan secara berurutan.
+        let (html_result, rankings) = tokio::join!(self.html("/", HOME_TTL), self.mal_rankings());
+        let html = html_result?;
+        let (latest, mut popular, website_hero) = self.parse_home(&html);
+        self.store_recommendations(&latest);
 
-        let hero = self
-            .mal_popularity_hero(&latest, &popular, &website_hero)
-            .await
-            .unwrap_or_else(|error| {
-                tracing::warn!(%error, "gagal menyusun pilihan beranda dari popularitas MyAnimeList");
-                website_hero
-            });
+        let hero = match rankings {
+            Some(entries) if !entries.is_empty() => {
+                let slides = build_popularity_hero(&entries, &latest, &popular, &website_hero);
+                if slides.is_empty() { website_hero } else { slides }
+            }
+            _ => website_hero,
+        };
 
         for (index, card) in popular.iter_mut().enumerate() {
             card.rank = index + 1;
@@ -221,175 +251,176 @@ impl NimegamiSource {
         })
     }
 
-    async fn mal_popularity_hero(
-        &self,
-        latest: &[Card],
-        popular: &[Card],
-        website_hero: &[HeroSlide],
-    ) -> Result<Vec<HeroSlide>> {
-        const CACHE_KEY: &str = "mal:top-anime:bypopularity:v1";
-        let entries = if let Some(body) = self.cache.fresh(CACHE_KEY) {
-            serde_json::from_str::<Vec<Value>>(&body)?
-        } else {
-            let mut rankings = Vec::new();
-            let mut fetch_error = None;
-            for page in 1..=4 {
-                if page > 1 {
-                    tokio::time::sleep(StdDuration::from_millis(360)).await;
-                }
-                let url = format!(
-                    "{}?filter=bypopularity&limit=25&page={page}",
-                    self.mal_top_api_url.trim_end_matches('/')
-                );
-                let response = match self.mal_client.get(url).send().await {
-                    Ok(response) => response,
-                    Err(error) => {
-                        fetch_error = Some(error.into());
-                        break;
-                    }
-                };
-                if !response.status().is_success() {
-                    fetch_error = Some(anyhow!("MyAnimeList popularity API mengembalikan HTTP {}", response.status()));
-                    break;
-                }
-                let payload: Value = match response.json().await {
-                    Ok(payload) => payload,
-                    Err(error) => {
-                        fetch_error = Some(error.into());
-                        break;
-                    }
-                };
-                let Some(page_entries) = payload.get("data").and_then(Value::as_array) else {
-                    fetch_error = Some(anyhow!("format daftar popularitas MyAnimeList tidak dikenali"));
-                    break;
-                };
-                if page_entries.is_empty() {
-                    break;
-                }
-                rankings.extend(page_entries.iter().cloned());
-                if page_entries.len() < 25 {
-                    break;
-                }
-            }
-
-            if rankings.is_empty() {
-                if let Some(body) = self.cache.stale(CACHE_KEY) {
-                    serde_json::from_str::<Vec<Value>>(&body)?
-                } else if let Some(error) = fetch_error {
-                    return Err(error);
-                } else {
-                    return Ok(website_hero.to_vec());
-                }
-            } else {
-                let body = serde_json::to_string(&rankings)?;
-                self.cache.put(
-                    CACHE_KEY.to_string(),
-                    body,
-                    StdDuration::from_secs(6 * 60 * 60),
-                );
-                rankings
-            }
+    /// Hanya kartu terbaru dari beranda, tanpa menunggu API eksternal.
+    ///
+    /// Halaman detail dan tonton cuma butuh daftar rekomendasi ringan, jadi
+    /// jalur ini sengaja tidak menyentuh MyAnimeList. Bila snapshot rekomendasi
+    /// masih segar, tidak ada permintaan jaringan sama sekali.
+    pub async fn latest(&self, limit: usize) -> Vec<Card> {
+        if let Some(cards) = self.cached_recommendations(limit) {
+            return cards;
+        }
+        let Ok(html) = self.html("/", HOME_TTL).await else {
+            return Vec::new();
         };
+        let latest = self.parse_home(&html).0;
+        self.store_recommendations(&latest);
+        latest.into_iter().take(limit).collect()
+    }
 
-        let mut catalog: Vec<Card> = Vec::new();
-        let mut seen_slugs = HashSet::new();
-        for card in popular.iter().chain(latest.iter()) {
-            if !card.slug.is_empty() && seen_slugs.insert(card.slug.clone()) && !is_adult_card(card) {
-                catalog.push(card.clone());
+    /// Rekomendasi instan dari snapshot terakhir, tanpa jaringan.
+    pub fn latest_cached(&self, limit: usize) -> Vec<Card> {
+        self.cached_recommendations(limit).unwrap_or_default()
+    }
+
+    fn store_recommendations(&self, cards: &[Card]) {
+        if cards.is_empty() {
+            return;
+        }
+        if let Ok(mut cache) = self.recommend.write() {
+            *cache = Some((Instant::now(), cards.to_vec()));
+        }
+    }
+
+    fn cached_recommendations(&self, limit: usize) -> Option<Vec<Card>> {
+        let cache = self.recommend.read().ok()?;
+        let (stored_at, cards) = cache.as_ref()?;
+        if stored_at.elapsed() >= StdDuration::from_secs(30 * 60) {
+            return None;
+        }
+        Some(cards.iter().take(limit).cloned().collect())
+    }
+
+    /// Urai halaman beranda dengan cache singkat. TTL-nya lebih pendek dari
+    /// `HOME_TTL` supaya konten baru tetap muncul tanpa mengulang parsing
+    /// 280 KB HTML pada setiap navigasi.
+    fn parse_home(&self, html: &str) -> ParsedHome {
+        if let Ok(cache) = self.parsed_home.read()
+            && let Some((stored_at, parsed)) = cache.as_ref()
+            && stored_at.elapsed() < StdDuration::from_secs(90)
+        {
+            return parsed.clone();
+        }
+
+        let parsed = parse_home_html(html, &self.base_url);
+        if let Ok(mut cache) = self.parsed_home.write() {
+            *cache = Some((Instant::now(), parsed.clone()));
+        }
+        parsed
+    }
+
+    /// Daftar anime terpopuler MyAnimeList, dengan cache dan batas waktu.
+    ///
+    /// Kegagalan disimpan sebentar (`MAL_FAIL_TTL`) supaya beranda tidak
+    /// menunggu timeout pada setiap permintaan ketika sumber sedang mati.
+    async fn mal_rankings(&self) -> Option<Vec<Value>> {
+        if let Some(body) = self.cache.fresh(MAL_CACHE_KEY)
+            && let Ok(entries) = serde_json::from_str::<Vec<Value>>(&body)
+        {
+            return Some(entries);
+        }
+        if self.cache.fresh(MAL_FAIL_KEY).is_some() {
+            return self.mal_stale_rankings();
+        }
+
+        match tokio::time::timeout(MAL_BUDGET, self.fetch_mal_rankings()).await {
+            Ok(Ok(entries)) if !entries.is_empty() => {
+                if let Ok(body) = serde_json::to_string(&entries) {
+                    self.cache.put(MAL_CACHE_KEY.to_string(), body, MAL_CACHE_TTL);
+                }
+                Some(entries)
+            }
+            Ok(Ok(_)) => {
+                tracing::warn!("popularitas MyAnimeList kosong, memakai pilihan beranda");
+                self.cache
+                    .put(MAL_FAIL_KEY.to_string(), String::new(), MAL_FAIL_TTL);
+                self.mal_stale_rankings()
+            }
+            Ok(Err(error)) => {
+                tracing::warn!(%error, "gagal mengambil popularitas MyAnimeList, memakai pilihan beranda");
+                self.cache
+                    .put(MAL_FAIL_KEY.to_string(), String::new(), MAL_FAIL_TTL);
+                self.mal_stale_rankings()
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "popularitas MyAnimeList melewati batas waktu, memakai pilihan beranda"
+                );
+                self.cache
+                    .put(MAL_FAIL_KEY.to_string(), String::new(), MAL_FAIL_TTL);
+                self.mal_stale_rankings()
             }
         }
-        for slide in website_hero {
-            if !slide.slug.is_empty()
-                && !is_adult_genre(&slide.title)
-                && !is_adult_genre(&slide.slug)
-                && seen_slugs.insert(slide.slug.clone())
-            {
-                catalog.push(Card {
-                    slug: slide.slug.clone(),
-                    title: slide.title.clone(),
-                    image: slide.image.clone(),
-                    href: slide.href.clone(),
-                    kind_label: slide.kind_label.clone(),
-                    score: slide.rating.clone(),
-                    ..Default::default()
-                });
-            }
-        }
+    }
 
-        let mut slides = Vec::new();
-        let mut matched_slugs = HashSet::new();
-        for entry in &entries {
-            if mal_entry_is_adult(entry) {
-                continue;
-            }
-            let titles = mal_entry_titles(entry);
-            let matched = catalog.iter().find(|card| {
-                let site_title = normalize_title_for_dedup(&card.title);
-                !site_title.is_empty()
-                    && titles.iter().any(|title| {
-                        normalize_title_for_dedup(title) == site_title
-                    })
+    /// Cache lama tetap dipakai saat refresh gagal supaya hero tidak berganti
+    /// tiba-tiba hanya karena API eksternal sedang down.
+    fn mal_stale_rankings(&self) -> Option<Vec<Value>> {
+        let body = self.cache.stale(MAL_CACHE_KEY)?;
+        serde_json::from_str::<Vec<Value>>(&body).ok()
+    }
+
+    /// Mengambil dua halaman teratas secara paralel.
+    ///
+    /// Parameter `limit` sengaja tidak dikirim karena mirror jikan-edge
+    /// menolaknya dengan HTTP 400; ukuran halaman bawaan sumber sudah cukup.
+    async fn fetch_mal_rankings(&self) -> Result<Vec<Value>> {
+        let base = self.mal_top_api_url.trim_end_matches('/');
+        let separator = if base.contains('?') { '&' } else { '?' };
+        let mut jobs = JoinSet::new();
+
+        for page in 1..=2 {
+            let url = format!("{base}{separator}filter=bypopularity&page={page}");
+            let client = self.mal_client.clone();
+            jobs.spawn(async move {
+                let response = client.get(url).send().await?.error_for_status()?;
+                let payload: Value = response.json().await?;
+                Ok::<Vec<Value>, anyhow::Error>(
+                    payload
+                        .get("data")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default(),
+                )
             });
-            let Some(card) = matched else { continue };
-            if !matched_slugs.insert(card.slug.clone()) {
-                continue;
-            }
+        }
 
-            let source_slide = website_hero.iter().find(|slide| slide.slug == card.slug);
-            let image = source_slide
-                .map(|slide| slide.image.clone())
-                .filter(|image| !image.is_empty())
-                .or_else(|| mal_trailer_image(entry))
-                .filter(|image| !image.is_empty())
-                .unwrap_or_else(|| card.image.clone());
-            let synopsis = entry
-                .get("synopsis")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .split("[Written by MAL Rewrite]")
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_string();
-            let rating = entry
-                .get("score")
-                .and_then(Value::as_f64)
-                .map(|score| format!("{score:.1}"))
-                .unwrap_or_else(|| card.score.clone());
-            let kind_label = if !card.kind_label.is_empty() {
-                card.kind_label.clone()
-            } else {
-                entry.get("type").and_then(Value::as_str).unwrap_or_default().to_string()
-            };
-            let year = entry
-                .pointer("/aired/prop/from/year")
-                .and_then(Value::as_i64)
-                .map(|year| year.to_string())
-                .unwrap_or_else(|| card.year.clone());
-            let mut meta = Vec::new();
-            if !year.is_empty() {
-                meta.push(year);
-            }
-            if let Some(popularity) = entry.get("popularity").and_then(Value::as_u64) {
-                meta.push(format!("MAL Populer #{popularity}"));
-            }
-
-            slides.push(HeroSlide {
-                slug: card.slug.clone(),
-                title: card.title.clone(),
-                href: card.href.clone(),
-                image,
-                synopsis,
-                rating,
-                kind_label,
-                meta,
-            });
-            if slides.len() == 10 {
-                break;
+        let mut rankings = Vec::new();
+        let mut seen = HashSet::new();
+        let mut last_error = None;
+        while let Some(joined) = jobs.join_next().await {
+            match joined {
+                Ok(Ok(entries)) => {
+                    for entry in entries {
+                        let key = entry
+                            .get("mal_id")
+                            .or_else(|| entry.get("malId"))
+                            .map(Value::to_string)
+                            .or_else(|| {
+                                entry
+                                    .get("title")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string)
+                            });
+                        if let Some(key) = key
+                            && !seen.insert(key)
+                        {
+                            continue;
+                        }
+                        rankings.push(entry);
+                    }
+                }
+                Ok(Err(error)) => last_error = Some(error),
+                Err(error) => last_error = Some(anyhow!(error)),
             }
         }
 
-        Ok(if slides.is_empty() { website_hero.to_vec() } else { slides })
+        if rankings.is_empty() {
+            return Err(last_error
+                .unwrap_or_else(|| anyhow!("respons popularitas MyAnimeList kosong")));
+        }
+
+        Ok(rankings)
     }
 
     pub async fn popular(&self, limit: usize) -> Result<Vec<Card>> {
@@ -645,24 +676,13 @@ impl NimegamiSource {
             }
         }
 
-        let mut health_jobs = JoinSet::new();
-        for url in probe_targets.iter().take(32) {
-            if self.cached_health(url).is_some() {
-                continue;
-            }
-            let client = self.client.clone();
-            let base = self.base_url.clone();
-            let url = url.clone();
-            health_jobs.spawn(async move { (url.clone(), probe_url(&client, &url, &base).await) });
-        }
-        while let Some(joined) = health_jobs.join_next().await {
-            if let Ok((url, ok)) = joined {
-                self.store_health(url, ok);
-            }
-        }
+        self.refresh_health_in_background(probe_targets.into_iter().take(32).collect());
 
         for stream in &mut streams {
-            stream.available = self.cached_health(&stream.url).unwrap_or(false);
+            // Jangan menahan halaman tonton hanya untuk mengecek setiap server.
+            // Status yang belum diketahui dianggap siap; pemutar akan berpindah
+            // ke server berikutnya bila sumber gagal saat benar-benar diputar.
+            stream.available = self.cached_health(&stream.url).unwrap_or(true);
             if !stream.available {
                 stream.note = "Tidak dapat dibuka".into();
             } else if stream.direct {
@@ -719,15 +739,12 @@ impl NimegamiSource {
             String::new()
         };
 
-        let recommended = self
-            .home()
-            .await
-            .map(|home| home.latest.into_iter().take(12).collect())
-            .unwrap_or_default();
+        let recommended = self.latest_cached(12);
 
         Ok(EpisodeDetail {
             slug: clean_slug(raw_slug),
             title: format!("{} Episode {}", detail.title, episode_number),
+            series_detail: detail.clone(),
             series_title: detail.title,
             series_slug: anime_slug.to_string(),
             series_image: detail.image,
@@ -848,8 +865,8 @@ impl NimegamiSource {
         (now.duration_since(checked_at) < HEALTH_TTL).then_some(ok)
     }
 
-    fn store_health(&self, url: String, ok: bool) {
-        let Ok(mut entries) = self.health.write() else {
+    fn store_health(health: &RwLock<HashMap<String, (Instant, bool)>>, url: String, ok: bool) {
+        let Ok(mut entries) = health.write() else {
             return;
         };
         entries.insert(url, (Instant::now(), ok));
@@ -860,11 +877,67 @@ impl NimegamiSource {
             entries.retain(|_, (checked_at, _)| *checked_at >= cutoff);
         }
     }
+
+    fn refresh_health_in_background(&self, urls: Vec<String>) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let client = self.client.clone();
+        let base = self.base_url.clone();
+        let health = self.health.clone();
+        handle.spawn(async move {
+            let mut jobs = JoinSet::new();
+            for url in urls {
+                let is_fresh = health
+                    .read()
+                    .ok()
+                    .and_then(|entries| entries.get(&url).copied())
+                    .is_some_and(|(checked_at, _)| checked_at.elapsed() < HEALTH_TTL);
+                if is_fresh {
+                    continue;
+                }
+                let client = client.clone();
+                let base = base.clone();
+                jobs.spawn(async move {
+                    let ok = probe_url(&client, &url, &base).await;
+                    (url, ok)
+                });
+            }
+
+            while let Some(joined) = jobs.join_next().await {
+                if let Ok((url, ok)) = joined {
+                    Self::store_health(&health, url, ok);
+                }
+            }
+        });
+    }
 }
 
 /* -------------------------------------------------------------------------
    Stream entry parsing (RSC payload Nimegami)
    ------------------------------------------------------------------------- */
+
+/// Mengambil satu halaman dari sumber. Dipakai baik untuk permintaan langsung
+/// maupun untuk pembaruan cache di latar belakang.
+async fn fetch_body(client: &reqwest::Client, url: &str) -> Result<String> {
+    match client.get(url).send().await {
+        Ok(response) => {
+            let status = response.status();
+            if !status.is_success() {
+                return Err(anyhow!("Nimegami mengembalikan HTTP {status} untuk {url}"));
+            }
+            let body = response
+                .text()
+                .await
+                .map_err(|error| anyhow!("gagal membaca respons Nimegami: {error}"))?;
+            if body.trim().is_empty() {
+                return Err(anyhow!("respons Nimegami kosong untuk {url}"));
+            }
+            Ok(body)
+        }
+        Err(error) => Err(anyhow!("tidak bisa menghubungi Nimegami: {error}")),
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
@@ -1041,7 +1114,7 @@ async fn fetch_stream_page(
         .get(&url)
         .header(reqwest::header::REFERER, format!("{base}/"))
         .header(reqwest::header::ORIGIN, base)
-        .timeout(StdDuration::from_secs(12))
+        .timeout(StdDuration::from_secs(8))
         .send()
         .await
         .ok()?;
@@ -1292,18 +1365,37 @@ fn parse_hero(scope: ElementRef<'_>, base: &str) -> Vec<HeroSlide> {
 
 fn mal_entry_titles(entry: &Value) -> Vec<&str> {
     let mut titles = Vec::new();
-    for key in ["title", "title_english", "title_japanese"] {
+    for key in [
+        "title",
+        "title_english",
+        "titleEnglish",
+        "title_japanese",
+        "titleJapanese",
+    ] {
         if let Some(title) = entry.get(key).and_then(Value::as_str)
             && !title.trim().is_empty()
         {
             titles.push(title);
         }
     }
-    if let Some(synonyms) = entry.get("title_synonyms").and_then(Value::as_array) {
-        titles.extend(synonyms.iter().filter_map(Value::as_str).filter(|title| !title.trim().is_empty()));
+    for key in ["title_synonyms", "titleSynonyms"] {
+        if let Some(synonyms) = entry.get(key).and_then(Value::as_array) {
+            titles.extend(
+                synonyms
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter(|title| !title.trim().is_empty()),
+            );
+        }
     }
     if let Some(alternates) = entry.get("titles").and_then(Value::as_array) {
-        titles.extend(alternates.iter().filter_map(|item| item.get("title").and_then(Value::as_str)));
+        for item in alternates {
+            if let Some(title) = item.get("title").and_then(Value::as_str) {
+                titles.push(title);
+            } else if let Some(title) = item.as_str() {
+                titles.push(title);
+            }
+        }
     }
     titles
 }
@@ -1323,16 +1415,201 @@ fn mal_entry_is_adult(entry: &Value) -> bool {
     has_adult_genre || rating.contains("hentai") || rating.contains("erotica") || rating.starts_with("rx")
 }
 
-fn mal_trailer_image(entry: &Value) -> Option<String> {
-    [
+/// Poster/trailer dari MyAnimeList untuk dipakai sebagai gambar cadangan.
+fn mal_entry_image(entry: &Value) -> Option<String> {
+    for path in [
         "/trailer/images/maximum_image_url",
         "/trailer/images/large_image_url",
         "/trailer/images/medium_image_url",
-    ]
-    .iter()
-    .filter_map(|path| entry.pointer(path).and_then(Value::as_str))
-    .find(|url| !url.trim().is_empty())
-    .map(str::to_string)
+        "/images/jpg/large_image_url",
+        "/images/webp/large_image_url",
+        "/images/jpg/image_url",
+    ] {
+        if let Some(url) = entry
+            .pointer(path)
+            .and_then(Value::as_str)
+            .filter(|url| !url.trim().is_empty())
+        {
+            return Some(url.to_string());
+        }
+    }
+    entry
+        .get("imageUrl")
+        .or_else(|| entry.get("image_url"))
+        .and_then(Value::as_str)
+        .filter(|url| !url.trim().is_empty())
+        .map(str::to_string)
+}
+
+/// Tahun rilis dari skema Jikan v4 maupun jikan-edge (`startDate`).
+fn mal_entry_year(entry: &Value) -> Option<String> {
+    if let Some(year) = entry
+        .pointer("/aired/prop/from/year")
+        .and_then(Value::as_i64)
+    {
+        return Some(year.to_string());
+    }
+    for path in ["/aired/from", "/startDate", "/start_date"] {
+        if let Some(raw) = entry.pointer(path).and_then(Value::as_str) {
+            let digits: String = raw
+                .chars()
+                .filter(|character| character.is_ascii_digit())
+                .take(4)
+                .collect();
+            if digits.len() == 4 {
+                return Some(digits);
+            }
+        }
+    }
+    None
+}
+
+/// Label jumlah penonton, dipakai jikan-edge yang tidak mengirim `popularity`.
+fn mal_entry_members_label(entry: &Value) -> Option<String> {
+    let members = entry.get("members").and_then(Value::as_u64)?;
+    if members == 0 {
+        return None;
+    }
+    Some(if members >= 1_000_000 {
+        format!("{:.1} jt anggota", members as f64 / 1_000_000.0).replace('.', ",")
+    } else if members >= 1_000 {
+        format!("{:.0} rb anggota", members as f64 / 1_000.0)
+    } else {
+        format!("{members} anggota")
+    })
+}
+
+/// Menyusun hero beranda dari daftar popularitas MAL yang sudah dicocokkan
+/// dengan katalog Nimegami.
+fn build_popularity_hero(
+    entries: &[Value],
+    latest: &[Card],
+    popular: &[Card],
+    website_hero: &[HeroSlide],
+) -> Vec<HeroSlide> {
+    let mut catalog: Vec<Card> = Vec::new();
+    let mut seen_slugs = HashSet::new();
+    for card in popular.iter().chain(latest.iter()) {
+        if !card.slug.is_empty() && seen_slugs.insert(card.slug.clone()) && !is_adult_card(card) {
+            catalog.push(card.clone());
+        }
+    }
+    for slide in website_hero {
+        if !slide.slug.is_empty()
+            && !is_adult_genre(&slide.title)
+            && !is_adult_genre(&slide.slug)
+            && seen_slugs.insert(slide.slug.clone())
+        {
+            catalog.push(Card {
+                slug: slide.slug.clone(),
+                title: slide.title.clone(),
+                image: slide.image.clone(),
+                href: slide.href.clone(),
+                kind_label: slide.kind_label.clone(),
+                score: slide.rating.clone(),
+                ..Default::default()
+            });
+        }
+    }
+
+    let mut slides = Vec::new();
+    let mut matched_slugs = HashSet::new();
+    for entry in entries {
+        if mal_entry_is_adult(entry) {
+            continue;
+        }
+        let titles = mal_entry_titles(entry);
+        let matched = catalog
+            .iter()
+            .find(|card| {
+                let site_title = normalize_title_for_dedup(&card.title);
+                !site_title.is_empty()
+                    && titles
+                        .iter()
+                        .any(|title| normalize_title_for_dedup(title) == site_title)
+            })
+            .or_else(|| {
+                // Cadangan untuk judul yang sedikit berbeda (mis. tambahan
+                // "Season 3"): cocokkan berdasarkan kemiripan token.
+                catalog.iter().find(|card| {
+                    titles.iter().any(|title| {
+                        title_match_score(&title_tokens(title), &card.title, &card.slug) >= 0.92
+                    })
+                })
+            });
+        let Some(card) = matched else { continue };
+        if !matched_slugs.insert(card.slug.clone()) {
+            continue;
+        }
+
+        let source_slide = website_hero.iter().find(|slide| slide.slug == card.slug);
+        // Utamakan gambar Nimegami sendiri: filter `backdrop` mengambil versi
+        // 1080px, sedangkan `imageUrl` MAL hanya cover kecil.
+        let image = source_slide
+            .map(|slide| slide.image.clone())
+            .filter(|image| !image.is_empty())
+            .or_else(|| (!card.image.is_empty()).then(|| card.image.clone()))
+            .or_else(|| mal_entry_image(entry))
+            .unwrap_or_default();
+        let synopsis = entry
+            .get("synopsis")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .split("[Written by MAL Rewrite]")
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let synopsis = if synopsis.is_empty() {
+            source_slide
+                .map(|slide| slide.synopsis.clone())
+                .unwrap_or_default()
+        } else {
+            synopsis
+        };
+        let rating = entry
+            .get("score")
+            .and_then(Value::as_f64)
+            .map(|score| format!("{score:.1}"))
+            .unwrap_or_else(|| card.score.clone());
+        let kind_label = if !card.kind_label.is_empty() {
+            card.kind_label.clone()
+        } else {
+            entry
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let year = mal_entry_year(entry)
+            .filter(|year| !year.is_empty())
+            .unwrap_or_else(|| card.year.clone());
+        let mut meta = Vec::new();
+        if !year.is_empty() {
+            meta.push(year);
+        }
+        if let Some(popularity) = entry.get("popularity").and_then(Value::as_u64) {
+            meta.push(format!("MAL Populer #{popularity}"));
+        } else if let Some(members) = mal_entry_members_label(entry) {
+            meta.push(members);
+        }
+
+        slides.push(HeroSlide {
+            slug: card.slug.clone(),
+            title: card.title.clone(),
+            href: card.href.clone(),
+            image,
+            synopsis,
+            rating,
+            kind_label,
+            meta,
+        });
+        if slides.len() == 10 {
+            break;
+        }
+    }
+
+    slides
 }
 
 fn parse_cards(scope: ElementRef<'_>, base: &str, limit: usize) -> Vec<Card> {
@@ -2161,6 +2438,9 @@ fn first_attr_text(scope: ElementRef<'_>, query: &str) -> String {
 #[derive(Default)]
 struct Cache {
     entries: RwLock<HashMap<String, CacheEntry>>,
+    /// Kunci yang sedang diperbarui di latar belakang, agar satu halaman tidak
+    /// di-fetch berkali-kali saat banyak permintaan datang bersamaan.
+    refreshing: RwLock<HashSet<String>>,
 }
 
 struct CacheEntry {
@@ -2198,6 +2478,19 @@ impl Cache {
                 .checked_sub(StdDuration::from_secs(2400))
                 .unwrap_or_else(Instant::now);
             entries.retain(|_, entry| entry.stored_at >= cutoff);
+        }
+    }
+
+    fn begin_refresh(&self, key: &str) -> bool {
+        let Ok(mut keys) = self.refreshing.write() else {
+            return false;
+        };
+        keys.insert(key.to_string())
+    }
+
+    fn end_refresh(&self, key: &str) {
+        if let Ok(mut keys) = self.refreshing.write() {
+            keys.remove(key);
         }
     }
 }

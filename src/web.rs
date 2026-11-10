@@ -107,13 +107,16 @@ fn error_page(state: &AppState, status: StatusCode, title: &str, message: &str) 
 }
 
 pub async fn home(State(state): State<AppState>) -> Response {
-    let home = state.source.home().await.unwrap_or_else(|error| {
+    // Genre diambil dari halaman katalog, jadi fetch-nya dijalankan bersamaan
+    // dengan beranda agar satu kunjungan tidak menunggu dua kali jaringan.
+    let (home_result, genres_result) = tokio::join!(state.source.home(), state.source.genres());
+    let home = home_result.unwrap_or_else(|error| {
         tracing::error!(%error, "gagal memuat beranda Nimegami");
         crate::models::HomeData::default()
     });
 
     let source_error = home.latest.is_empty() && home.hero.is_empty();
-    let genres = state.source.genres().await.unwrap_or_default();
+    let genres = genres_result.unwrap_or_default();
 
     let mut ctx = with(
         &state,
@@ -145,7 +148,7 @@ pub async fn browse(
                 &state,
                 StatusCode::BAD_GATEWAY,
                 "Sumber sedang tidak bisa diakses",
-                "Katalog anime belum dapat dimuat dari Nimegami. Coba lagi beberapa saat lagi.",
+                "Katalog anime belum dapat dimuat. Coba lagi beberapa saat lagi.",
             );
         }
     };
@@ -159,7 +162,7 @@ pub async fn browse(
     let description = if is_search {
         format!("Hasil pencarian anime “{}” subtitle Indonesia.", params.q)
     } else {
-        "Jelajahi katalog anime subtitle Indonesia dari Nimegami.".to_string()
+        "Jelajahi katalog anime subtitle Indonesia".to_string()
     };
 
     let mut ctx = with(&state, "browse", &title, &description);
@@ -185,7 +188,12 @@ pub async fn anime_detail(
     State(state): State<AppState>,
     Path(slug): Path<String>,
 ) -> Response {
-    let detail = match state.source.detail(&slug).await {
+    // Rekomendasi diambil dari snapshot cache supaya halaman anime tidak
+    // menunggu permintaan ke beranda Nimegami.
+    let recommended = state.source.latest_cached(12);
+    let detail_result = state.source.detail(&slug).await;
+
+    let detail = match detail_result {
         Ok(detail) => detail,
         Err(error) => {
             tracing::warn!(%error, slug, "gagal memuat detail anime");
@@ -197,7 +205,7 @@ pub async fn anime_detail(
                 if is_adult {
                     "Anime ini diblokir dan tidak dapat diakses karena mengandung konten 18+ / dewasa."
                 } else {
-                    "Judul ini tidak tersedia di Nimegami, atau halaman sumber sedang bermasalah."
+                    "Judul ini tidak tersedia, atau halaman sumber sedang bermasalah."
                 },
             );
         }
@@ -216,13 +224,6 @@ pub async fn anime_detail(
     insert(&mut ctx, "detail", &detail);
     insert(&mut ctx, "latest_episode", &latest_episode);
     insert(&mut ctx, "first_episode", &first_episode);
-
-    let recommended = state
-        .source
-        .home()
-        .await
-        .map(|home| home.latest.into_iter().take(12).collect::<Vec<_>>())
-        .unwrap_or_default();
     insert(&mut ctx, "recommended", &recommended);
 
     render(&state, "anime.html", &ctx, StatusCode::OK)
@@ -241,17 +242,9 @@ pub async fn watch(State(state): State<AppState>, Path(slug): Path<String>) -> R
                 if is_adult {
                     "Episode ini diblokir dan tidak dapat diakses karena mengandung konten 18+ / dewasa."
                 } else {
-                    "Episode ini tidak tersedia di Nimegami, atau halaman sumber sedang bermasalah."
+                    "Episode ini tidak tersedia, atau halaman sumber sedang bermasalah."
                 },
             );
-        }
-    };
-
-    let series = match state.source.detail(&episode.series_slug).await {
-        Ok(detail) => Some(detail),
-        Err(error) => {
-            tracing::warn!(%error, "gagal memuat seri untuk halaman tonton");
-            None
         }
     };
 
@@ -266,7 +259,7 @@ pub async fn watch(State(state): State<AppState>, Path(slug): Path<String>) -> R
 
     let mut ctx = with(&state, "browse", &title, &description);
     insert(&mut ctx, "episode", &episode);
-    insert(&mut ctx, "series", &series);
+    insert(&mut ctx, "series", &episode.series_detail);
     insert(&mut ctx, "streams_json", streams_json);
     insert(&mut ctx, "available_qualities", available_qualities);
     insert(
@@ -386,13 +379,8 @@ pub async fn search_page(
             Vec::new(),
         )
     } else {
-        let latest = state
-            .source
-            .home()
-            .await
-            .map(|home| home.latest)
-            .unwrap_or_default();
-        (Vec::new(), latest.into_iter().take(12).collect())
+        let latest = state.source.latest(12).await;
+        (Vec::new(), latest)
     };
 
     let title = if q.is_empty() {
@@ -476,6 +464,25 @@ pub async fn api_streams(
 #[derive(Deserialize)]
 pub struct VideoProxyQuery {
     pub url: String,
+    pub download: Option<bool>,
+    pub filename: Option<String>,
+}
+
+fn safe_video_download_name(value: Option<&str>) -> String {
+    let mut name = value
+        .unwrap_or_default()
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric() || " ._-".contains(*character))
+        .take(110)
+        .collect::<String>();
+    name = name.trim().trim_matches('.').to_string();
+    if name.is_empty() {
+        name = "aniverse-video".to_string();
+    }
+    if !name.to_ascii_lowercase().ends_with(".mp4") {
+        name.push_str(".mp4");
+    }
+    name
 }
 
 pub async fn api_video(
@@ -519,6 +526,13 @@ pub async fn api_video(
             response = response.header(name, value);
         }
     }
+    if query.download.unwrap_or(false) {
+        let filename = safe_video_download_name(query.filename.as_deref());
+        response = response.header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{filename}\""),
+        );
+    }
     response
         .body(Body::from_stream(upstream.bytes_stream()))
         .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response())
@@ -549,12 +563,7 @@ pub async fn api_artwork(
 }
 
 pub async fn random(State(state): State<AppState>) -> Response {
-    let latest = state
-        .source
-        .home()
-        .await
-        .map(|home| home.latest)
-        .unwrap_or_default();
+    let latest = state.source.latest(60).await;
 
     if latest.is_empty() {
         return Redirect::to("/anime").into_response();

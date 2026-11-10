@@ -14,6 +14,9 @@
   const loginNotice = document.querySelector("#upload-auth-required");
   const adminNotice = document.querySelector("#upload-admin-denied");
   const adminPanel = document.querySelector("#upload-admin-panel");
+  const adminStatusNode = document.querySelector("#upload-admin-status");
+  const refreshAdminButton = document.querySelector("#refresh-admin-access");
+  const adminOnlyNodes = Array.from(document.querySelectorAll("[data-admin-only]"));
   const listNode = document.querySelector("#uploaded-anime-list");
   const listStatus = document.querySelector("#upload-list-status");
   const uploadForm = document.querySelector("#upload-anime-form");
@@ -57,15 +60,24 @@
       let avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
       let uploadedPath = "";
       if (avatarFile) {
+        const declaredType = String(avatarFile.type || "").split(";")[0].trim().toLowerCase();
+        const normalizedType = ({ "image/jpg": "image/jpeg", "image/pjpeg": "image/jpeg" })[declaredType] || declaredType;
+        const extension = avatarFile.name.split(".").pop()?.toLowerCase();
+        const extensionTypes = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
+        const contentType = ["", "application/octet-stream"].includes(normalizedType)
+          ? extensionTypes[extension]
+          : normalizedType;
         const extensions = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
-        const extension = extensions[avatarFile.type];
-        if (!extension) throw new Error("Foto harus berformat JPG, PNG, atau WebP.");
+        const canonicalExtension = extensions[contentType];
+        if (!canonicalExtension) throw new Error("Foto harus berformat JPG, PNG, atau WebP.");
         if (avatarFile.size > 2 * 1024 * 1024) throw new Error("Ukuran foto maksimal 2 MB.");
         const fileId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        uploadedPath = `${user.id}/${fileId}.${extension}`;
+        uploadedPath = `${user.id}/${fileId}.${canonicalExtension}`;
         const { error: uploadError } = await client.storage.from("aniverse-avatars").upload(uploadedPath, avatarFile, {
           cacheControl: "3600",
-          contentType: avatarFile.type,
+          // Samakan MIME request dengan bucket Storage. Beberapa perangkat
+          // melaporkan JPEG sebagai image/jpg atau tidak mengisi file.type.
+          contentType,
           upsert: false,
         });
         if (uploadError) throw uploadError;
@@ -96,6 +108,7 @@
 
   const setAuthView = (session) => {
     const user = session?.user;
+    const admin = isAdmin(user);
     window.aniVerseAuth.user = user || null;
     window.aniVerseAuthUser = user || null;
     if (accountStatus) {
@@ -107,8 +120,13 @@
     if (accountAuthCard) accountAuthCard.hidden = Boolean(user);
     if (logoutButton) logoutButton.hidden = !user;
     if (loginNotice) loginNotice.hidden = Boolean(user);
-    if (adminNotice) adminNotice.hidden = !user || isAdmin(user);
-    if (adminPanel) adminPanel.hidden = !isAdmin(user);
+    if (adminNotice) adminNotice.hidden = !user || admin;
+    if (adminPanel) adminPanel.hidden = !admin;
+    // Menu "Unggah anime" hanya muncul untuk akun ber-role admin. Ini hanya
+    // lapisan tampilan; penulisan data tetap dijaga Row Level Security Supabase.
+    adminOnlyNodes.forEach((node) => {
+      node.hidden = !admin;
+    });
     window.dispatchEvent(new CustomEvent("aniverse:auth-change", { detail: { user: user || null } }));
   };
 
@@ -131,6 +149,31 @@
   logoutButton?.addEventListener("click", async () => {
     const { error } = await client.auth.signOut();
     if (error && accountStatus) accountStatus.textContent = `Gagal keluar: ${error.message}`;
+  });
+
+  // Setelah role admin diberikan lewat SQL/dashboard Supabase, token lama masih
+  // menyimpan role sebelumnya. Tombol ini memaksa sesi diambil ulang.
+  refreshAdminButton?.addEventListener("click", async () => {
+    refreshAdminButton.disabled = true;
+    if (adminStatusNode) adminStatusNode.textContent = "Memperbarui sesi Supabase…";
+    try {
+      const { data, error } = await client.auth.refreshSession();
+      if (error) throw error;
+      setAuthView(data.session);
+      if (isAdmin(data.session?.user)) {
+        if (adminStatusNode) {
+          adminStatusNode.textContent = "Akses admin aktif. Form unggah sudah terbuka.";
+        }
+      } else if (adminStatusNode) {
+        adminStatusNode.textContent = "Akun ini masih belum memiliki role admin di Supabase.";
+      }
+    } catch (error) {
+      if (adminStatusNode) {
+        adminStatusNode.textContent = `Gagal memperbarui akses: ${error.message}`;
+      }
+    } finally {
+      refreshAdminButton.disabled = false;
+    }
   });
 
   const publicUrl = (path) =>

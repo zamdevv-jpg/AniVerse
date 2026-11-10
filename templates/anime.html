@@ -4,13 +4,18 @@
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb">
   <a href="/">Beranda</a>
-  <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+  <svg class="icon" aria-hidden="true">
+    <use href="#i-chevron-right" />
+  </svg>
   <a href="/anime">Katalog</a>
-  <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+  <svg class="icon" aria-hidden="true">
+    <use href="#i-chevron-right" />
+  </svg>
   <span>{{ detail.title }}</span>
 </nav>
 
-<section class="detail-hero" style="--detail-image:url('{{ (detail.banner_image if detail.banner_image else detail.image)|backdrop }}')">
+<section class="detail-hero"
+  style="--detail-image:url('{{ (detail.banner_image if detail.banner_image else detail.image)|backdrop }}')">
   <div class="detail-backdrop" aria-hidden="true"></div>
   <div class="detail-inner">
     <div class="detail-poster">
@@ -30,7 +35,9 @@
         </span>
         {% endif %}
         {% if detail.score %}
-        <span class="detail-score"><svg class="icon fill" aria-hidden="true"><use href="#i-star-fill"/></svg>{{ detail.score }}<small>/10</small></span>
+        <span class="detail-score"><svg class="icon fill" aria-hidden="true">
+            <use href="#i-star-fill" />
+          </svg>{{ detail.score }}<small>/10</small></span>
         {% endif %}
       </div>
 
@@ -56,20 +63,18 @@
       <div class="detail-actions">
         {% if latest_episode %}
         <a class="btn btn-gold" href="{{ latest_episode.href }}">
-          <svg class="icon fill" aria-hidden="true"><use href="#i-play"/></svg>
+          <svg class="icon fill" aria-hidden="true">
+            <use href="#i-play" />
+          </svg>
           Tonton {{ latest_episode.title }}
         </a>
         {% endif %}
-        <button
-          class="btn btn-glass bookmark-btn"
-          type="button"
-          data-bookmark
-          data-slug="{{ detail.slug }}"
-          data-title="{{ detail.title }}"
-          data-image="{{ detail.image }}"
-          data-href="/anime/{{ detail.slug|urlencode }}"
+        <button class="btn btn-glass bookmark-btn" type="button" data-bookmark data-slug="{{ detail.slug }}"
+          data-title="{{ detail.title }}" data-image="{{ detail.image }}" data-href="/anime/{{ detail.slug|urlencode }}"
           aria-pressed="false">
-          <svg class="icon" aria-hidden="true"><use href="#i-bookmark"/></svg>
+          <svg class="icon" aria-hidden="true">
+            <use href="#i-bookmark" />
+          </svg>
           <span class="bookmark-label">Bookmark</span>
         </button>
         {% if first_episode and latest_episode and first_episode.slug != latest_episode.slug %}
@@ -86,7 +91,7 @@
   <p class="synopsis-text" id="synopsis-text">{{ detail.synopsis }}</p>
   <button class="text-btn" type="button" id="synopsis-toggle" hidden>Selengkapnya</button>
   {% else %}
-  <p class="muted">Sinopsis belum tersedia di Nimegami.</p>
+  <p class="muted">Sinopsis belum tersedia.</p>
   {% endif %}
 </section>
 
@@ -97,19 +102,25 @@
       <p class="section-sub">{{ detail.episode_count }} episode · pilih nomor untuk mulai menonton</p>
     </div>
     <button class="btn btn-ghost btn-sm" type="button" id="episode-sort" data-order="desc">
-      <svg class="icon"><use href="#i-refresh"/></svg><span>Terbaru dulu</span>
+      <svg class="icon">
+        <use href="#i-refresh" />
+      </svg><span>Terbaru dulu</span>
     </button>
   </div>
 
   <div class="episode-filter">
-    <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-    <input type="search" id="episode-filter" placeholder="Cari nomor episode..." aria-label="Cari episode" inputmode="numeric">
+    <svg class="icon" aria-hidden="true">
+      <use href="#i-search" />
+    </svg>
+    <input type="search" id="episode-filter" placeholder="Cari nomor episode..." aria-label="Cari episode"
+      inputmode="numeric">
   </div>
 
   {% if detail.episodes|length > 0 %}
   <div class="episode-grid" id="episode-list">
     {% for episode in detail.episodes %}
-    <a class="episode-chip{{ ' is-latest' if loop.first else '' }}" href="{{ episode.href }}" data-search="{{ episode.number }} {{ episode.title }}">
+    <a class="episode-chip{{ ' is-latest' if loop.first else '' }}" href="{{ episode.href }}"
+      data-search="{{ episode.number }} {{ episode.title }}">
       {{ episode.number }}
     </a>
     {% endfor %}
@@ -136,7 +147,9 @@
 <section class="detail-section">
   <div class="section-head">
     <h2 class="section-title">Rekomendasi untukmu</h2>
-    <a class="section-link" href="/anime?order=popular">Lihat semua <svg class="icon"><use href="#i-chevron-right"/></svg></a>
+    <a class="section-link" href="/anime?order=popular">Lihat semua <svg class="icon">
+        <use href="#i-chevron-right" />
+      </svg></a>
   </div>
   <div class="poster-grid">
     {% for card in recommended %}

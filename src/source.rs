@@ -37,6 +37,16 @@ impl Source {
         self.inner.home().await
     }
 
+    /// Daftar kartu terbaru tanpa menunggu sumber eksternal seperti MAL.
+    pub async fn latest(&self, limit: usize) -> Vec<Card> {
+        self.inner.latest(limit).await
+    }
+
+    /// Rekomendasi dari snapshot cache saja (tanpa jaringan).
+    pub fn latest_cached(&self, limit: usize) -> Vec<Card> {
+        self.inner.latest_cached(limit)
+    }
+
     pub async fn popular(&self, limit: usize) -> Result<Vec<Card>> {
         self.inner.popular(limit).await
     }

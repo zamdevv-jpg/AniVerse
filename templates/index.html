@@ -4,10 +4,12 @@
 {% block content %}
 {% if source_error %}
 <div class="notice notice-warn">
-  <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+  <svg class="icon" aria-hidden="true">
+    <use href="#i-info" />
+  </svg>
   <div>
     <strong>Sumber data belum merespons.</strong>
-    <span>Nimegami sedang tidak bisa diakses dari server ini. Coba muat ulang beberapa saat lagi.</span>
+    <span>Data sedang tidak bisa diakses dari server ini. Coba muat ulang beberapa saat lagi.</span>
   </div>
   <a class="btn btn-ghost btn-sm" href="/">Muat ulang</a>
 </div>
@@ -17,18 +19,23 @@
 <section class="hero-carousel" id="hero" data-hero aria-label="Anime pilihan">
   <div class="hero-track">
     {% for slide in hero %}
-    <article class="hero-slide{{ ' is-active' if loop.first else '' }}" aria-hidden="{{ 'false' if loop.first else 'true' }}">
+    <article class="hero-slide{{ ' is-active' if loop.first else '' }}"
+      aria-hidden="{{ 'false' if loop.first else 'true' }}">
       <div class="hero-image" style="background-image:url('{{ slide.image|backdrop }}')" aria-hidden="true"></div>
       <div class="hero-overlay" aria-hidden="true"></div>
       <div class="hero-content">
         <span class="hero-eyebrow">
-          <svg class="icon fill" aria-hidden="true"><use href="#i-flame"/></svg>
+          <svg class="icon fill" aria-hidden="true">
+            <use href="#i-flame" />
+          </svg>
           Pilihan hari ini
           {% if slide.kind_label %}<em>{{ slide.kind_label }}</em>{% endif %}
         </span>
         <h1 class="hero-title">{{ slide.title }}</h1>
         <div class="hero-meta">
-          {% if slide.rating %}<span class="hero-rating"><svg class="icon fill" aria-hidden="true"><use href="#i-star-fill"/></svg>{{ slide.rating }}</span>{% endif %}
+          {% if slide.rating %}<span class="hero-rating"><svg class="icon fill" aria-hidden="true">
+              <use href="#i-star-fill" />
+            </svg>{{ slide.rating }}</span>{% endif %}
           {% for item in slide.meta[:3] %}
           <span>{{ item }}</span>
           {% endfor %}
@@ -36,7 +43,9 @@
         {% if slide.synopsis %}<p class="hero-synopsis">{{ slide.synopsis }}</p>{% endif %}
         <div class="hero-actions">
           <a class="btn btn-gold" href="{{ slide.href }}">
-            <svg class="icon fill" aria-hidden="true"><use href="#i-play"/></svg>
+            <svg class="icon fill" aria-hidden="true">
+              <use href="#i-play" />
+            </svg>
             Tonton sekarang
           </a>
           <a class="btn btn-glass" href="{{ slide.href }}">Detail anime</a>
@@ -50,13 +59,18 @@
   <div class="hero-controls">
     <div class="hero-dots" role="tablist" aria-label="Pilih slide">
       {% for slide in hero %}
-      <button class="hero-dot{{ ' is-active' if loop.first else '' }}" type="button" aria-label="Slide {{ loop.index }}"></button>
+      <button class="hero-dot{{ ' is-active' if loop.first else '' }}" type="button"
+        aria-label="Slide {{ loop.index }}"></button>
       {% endfor %}
     </div>
     <div class="hero-arrows">
       <span class="hero-count"><b id="hero-current">01</b>/<span id="hero-total">{{ hero|length }}</span></span>
-      <button class="hero-arrow" id="hero-prev" type="button" aria-label="Sebelumnya"><svg class="icon"><use href="#i-chevron-left"/></svg></button>
-      <button class="hero-arrow" id="hero-next" type="button" aria-label="Berikutnya"><svg class="icon"><use href="#i-chevron-right"/></svg></button>
+      <button class="hero-arrow" id="hero-prev" type="button" aria-label="Sebelumnya"><svg class="icon">
+          <use href="#i-chevron-left" />
+        </svg></button>
+      <button class="hero-arrow" id="hero-next" type="button" aria-label="Berikutnya"><svg class="icon">
+          <use href="#i-chevron-right" />
+        </svg></button>
     </div>
   </div>
   {% endif %}
@@ -75,7 +89,9 @@
 <section class="section" id="continue-watching" hidden>
   <div class="section-head">
     <h2 class="section-title">Lanjut tonton</h2>
-    <a class="section-link" href="/histori">Riwayat <svg class="icon"><use href="#i-chevron-right"/></svg></a>
+    <a class="section-link" href="/histori">Riwayat <svg class="icon">
+        <use href="#i-chevron-right" />
+      </svg></a>
   </div>
   <div class="poster-grid" id="continue-grid"></div>
 </section>
@@ -84,9 +100,11 @@
   <div class="section-head">
     <div>
       <h2 class="section-title">Update terbaru</h2>
-      <p class="section-sub">Episode baru dari Nimegami</p>
+      <p class="section-sub">Episode baru dari data</p>
     </div>
-    <a class="section-link" href="/anime?order=update">Lihat semua <svg class="icon"><use href="#i-chevron-right"/></svg></a>
+    <a class="section-link" href="/anime?order=update">Lihat semua <svg class="icon">
+        <use href="#i-chevron-right" />
+      </svg></a>
   </div>
 
   {% if latest|length > 0 %}
@@ -97,7 +115,9 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <span class="empty-icon"><svg class="icon" aria-hidden="true"><use href="#i-film"/></svg></span>
+    <span class="empty-icon"><svg class="icon" aria-hidden="true">
+        <use href="#i-film" />
+      </svg></span>
     <h3>Belum ada update</h3>
     <p>Daftar episode terbaru belum bisa dimuat dari Nimegami.</p>
     <a class="btn btn-gold" href="/anime">Buka katalog</a>
@@ -112,7 +132,9 @@
       <h2 class="section-title">Lagi ramai</h2>
       <p class="section-sub">Paling banyak ditonton minggu ini</p>
     </div>
-    <a class="section-link" href="/anime?order=popular">Lihat semua <svg class="icon"><use href="#i-chevron-right"/></svg></a>
+    <a class="section-link" href="/anime?order=popular">Lihat semua <svg class="icon">
+        <use href="#i-chevron-right" />
+      </svg></a>
   </div>
   <div class="rank-list">
     {% for card in popular %}
@@ -128,6 +150,8 @@
     <h2>Temukan anime berikutnya</h2>
     <p>Filter genre, urutkan berdasarkan rating, atau cari langsung judul favoritmu.</p>
   </div>
-  <a class="btn btn-gold" href="/anime">Jelajahi katalog <svg class="icon"><use href="#i-arrow-right"/></svg></a>
+  <a class="btn btn-gold" href="/anime">Jelajahi katalog <svg class="icon">
+      <use href="#i-arrow-right" />
+    </svg></a>
 </section>
 {% endblock %}

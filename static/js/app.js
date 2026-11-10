@@ -11,11 +11,21 @@
     downloads: "aniverse:downloads",
     offline: "aniverse:offline-pages",
     quality: "aniverse:quality",
+    volume: "aniverse:player-volume",
+    audioBoost: "aniverse:player-audio-boost",
+    playbackRate: "aniverse:player-playback-rate",
+    autoReplay: "aniverse:player-auto-replay",
+    autoContinue: "aniverse:player-auto-continue",
   };
 
   const OFFLINE_PAGE_CACHE = "aniverse-offline-pages-v1";
+  const VIDEO_DOWNLOAD_CACHE = "aniverse-video-downloads-v1";
+  const DOWNLOAD_HANDLE_DB = "aniverse-download-handles-v1";
   const $ = (selector, scope = document) => scope.querySelector(selector);
   const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
+
+  // Sembunyikan menu konteks browser saat klik kanan pada area situs.
+  document.addEventListener("contextmenu", (event) => event.preventDefault());
 
   /* ---------------------------------------------------------
      Penyimpanan lokal
@@ -79,6 +89,13 @@
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days} hari lalu`;
     return new Date(Number(timestamp)).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+  }
+
+  function makeWatchTitleDisplayOnly() {
+    const title = $(".watch-copy h1");
+    if (title?.querySelector("a")) title.replaceChildren(document.createTextNode(title.textContent || ""));
+    const seriesCrumb = $('.breadcrumbs a[href^="/anime/"]');
+    if (seriesCrumb) seriesCrumb.replaceWith(document.createTextNode(seriesCrumb.textContent || ""));
   }
 
   function formatDuration(seconds) {
@@ -657,6 +674,87 @@
     const photoName = $("#profile-photo-name");
     let selectedAvatar = null;
     let previewUrl = "";
+    const cropModal = $("#profile-avatar-crop-modal");
+    const cropCanvas = $("#profile-avatar-crop-canvas");
+    const cropZoom = $("#profile-avatar-crop-zoom");
+    const cropApply = $("#profile-avatar-crop-apply");
+    let cropImage = null;
+    let cropObjectUrl = "";
+    let cropOffsetX = 0;
+    let cropOffsetY = 0;
+    let cropDrag = null;
+    const cropSize = cropCanvas?.width || 320;
+
+    const cropGeometry = (size = cropSize) => {
+      if (!cropImage) return null;
+      const zoom = Math.max(1, Number(cropZoom?.value) || 1);
+      const scale = Math.max(size / cropImage.naturalWidth, size / cropImage.naturalHeight) * zoom;
+      const width = cropImage.naturalWidth * scale;
+      const height = cropImage.naturalHeight * scale;
+      const offsetScale = size / cropSize;
+      const offsetX = cropOffsetX * offsetScale;
+      const offsetY = cropOffsetY * offsetScale;
+      const maxX = Math.max(0, (width - size) / 2);
+      const maxY = Math.max(0, (height - size) / 2);
+      const clampedX = Math.max(-maxX, Math.min(maxX, offsetX));
+      const clampedY = Math.max(-maxY, Math.min(maxY, offsetY));
+      cropOffsetX = clampedX / offsetScale;
+      cropOffsetY = clampedY / offsetScale;
+      return { width, height, x: (size - width) / 2 + clampedX, y: (size - height) / 2 + clampedY };
+    };
+
+    const drawAvatarCrop = (canvas = cropCanvas) => {
+      if (!canvas || !cropImage) return;
+      const context = canvas.getContext("2d");
+      const size = canvas.width;
+      const geometry = cropGeometry(size);
+      if (!geometry) return;
+      context.clearRect(0, 0, size, size);
+      context.save();
+      if (canvas === cropCanvas) {
+        context.beginPath();
+        context.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+        context.clip();
+      }
+      context.drawImage(cropImage, geometry.x, geometry.y, geometry.width, geometry.height);
+      context.restore();
+    };
+
+    const closeAvatarCrop = () => {
+      if (cropModal) cropModal.hidden = true;
+      cropImage = null;
+      cropDrag = null;
+      if (cropObjectUrl) URL.revokeObjectURL(cropObjectUrl);
+      cropObjectUrl = "";
+      if (avatarFile) avatarFile.value = "";
+    };
+
+    const prepareAvatarCrop = async (file) => {
+      closeAvatarCrop();
+      cropObjectUrl = URL.createObjectURL(file);
+      const image = new Image();
+      image.decoding = "async";
+      image.src = cropObjectUrl;
+      try {
+        await image.decode();
+      } catch {
+        closeAvatarCrop();
+        toast("Foto tidak bisa dibuka. Coba pilih gambar lain.", "i-info");
+        return;
+      }
+      if (image.naturalWidth > 20000 || image.naturalHeight > 20000 || image.naturalWidth * image.naturalHeight > 100_000_000) {
+        closeAvatarCrop();
+        toast("Resolusi foto terlalu besar untuk diproses di perangkat ini.", "i-info");
+        return;
+      }
+      cropImage = image;
+      cropOffsetX = 0;
+      cropOffsetY = 0;
+      if (cropZoom) cropZoom.value = "1";
+      drawAvatarCrop();
+      if (cropModal) cropModal.hidden = false;
+    };
+
     const renderProfile = () => {
       const account = currentAccount();
       const nameNode = $("#profile-name");
@@ -683,6 +781,7 @@
     };
 
     const resetAvatarSelection = () => {
+      closeAvatarCrop();
       selectedAvatar = null;
       if (avatarFile) avatarFile.value = "";
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -705,19 +804,71 @@
     avatarFile?.addEventListener("change", () => {
       const file = avatarFile.files?.[0] || null;
       if (!file) return;
-      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-      if (!allowedTypes.includes(file.type)) {
+      const declaredType = String(file.type || "").split(";")[0].trim().toLowerCase();
+      const normalizedType = ({ "image/jpg": "image/jpeg", "image/pjpeg": "image/jpeg" })[declaredType] || declaredType;
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      const extensionTypes = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
+      const supportedType = ["", "application/octet-stream"].includes(normalizedType)
+        ? extensionTypes[extension]
+        : normalizedType;
+      if (!["image/jpeg", "image/png", "image/webp"].includes(supportedType)) {
         avatarFile.value = "";
         return toast("Pilih foto JPG, PNG, atau WebP", "i-info");
       }
-      if (file.size > 2 * 1024 * 1024) {
+      if (file.size > 20 * 1024 * 1024) {
         avatarFile.value = "";
-        return toast("Ukuran foto maksimal 2 MB", "i-info");
+        return toast("Ukuran foto maksimal 20 MB", "i-info");
       }
+      prepareAvatarCrop(file);
+    });
+
+    cropZoom?.addEventListener("input", drawAvatarCrop);
+    cropCanvas?.addEventListener("pointerdown", (event) => {
+      if (!cropImage) return;
+      cropDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      cropCanvas.setPointerCapture(event.pointerId);
+    });
+    cropCanvas?.addEventListener("pointermove", (event) => {
+      if (!cropDrag || cropDrag.pointerId !== event.pointerId) return;
+      const bounds = cropCanvas.getBoundingClientRect();
+      cropOffsetX += (event.clientX - cropDrag.x) * (cropCanvas.width / bounds.width);
+      cropOffsetY += (event.clientY - cropDrag.y) * (cropCanvas.height / bounds.height);
+      cropDrag.x = event.clientX;
+      cropDrag.y = event.clientY;
+      drawAvatarCrop();
+    });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((name) =>
+      cropCanvas?.addEventListener(name, () => { cropDrag = null; }),
+    );
+    $$('[data-avatar-crop-cancel]', cropModal || document).forEach((button) =>
+      button.addEventListener("click", closeAvatarCrop),
+    );
+    cropApply?.addEventListener("click", async () => {
+      if (!cropImage || !cropCanvas) return;
+      const output = document.createElement("canvas");
+      output.width = 512;
+      output.height = 512;
+      drawAvatarCrop(output);
+      const makeBlob = (type, quality) => new Promise((resolve) => output.toBlob(resolve, type, quality));
+      let blob = await makeBlob("image/webp", 0.88);
+      let extension = "webp";
+      if (!blob) {
+        blob = await makeBlob("image/png");
+        extension = "png";
+      }
+      if (blob?.size > 2 * 1024 * 1024) blob = await makeBlob("image/webp", 0.7);
+      if (!blob || blob.size > 2 * 1024 * 1024) {
+        toast("Crop foto masih terlalu besar. Coba kecilkan kualitas gambar sumber.", "i-info");
+        return;
+      }
+      if (blob.type === "image/png") extension = "png";
+      else if (blob.type === "image/jpeg") extension = "jpg";
+      const croppedFile = new File([blob], `avatar-${Date.now()}.${extension}`, { type: blob.type });
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      selectedAvatar = file;
-      previewUrl = URL.createObjectURL(file);
-      if (photoName) photoName.textContent = file.name;
+      selectedAvatar = croppedFile;
+      previewUrl = URL.createObjectURL(croppedFile);
+      if (photoName) photoName.textContent = `Crop foto · ${croppedFile.name}`;
+      closeAvatarCrop();
       renderProfile();
     });
 
@@ -802,6 +953,183 @@
      Unduhan & offline
      --------------------------------------------------------- */
 
+  function videoDownloadName(title, quality = "") {
+    const base = `${title || "AniVerse"} ${quality || ""}`
+      .normalize("NFKD")
+      .replace(/[^\w .-]/g, " ")
+      .replace(/[. ]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 110) || "AniVerse video";
+    return `${base}.mp4`;
+  }
+
+  function deviceDownloadUrl(id) {
+    return new URL(`/__device-downloads/${encodeURIComponent(id)}`, location.origin).href;
+  }
+
+  function openDownloadHandleDb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error("Penyimpanan folder tidak didukung."));
+      const request = indexedDB.open(DOWNLOAD_HANDLE_DB, 1);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains("directories")) request.result.createObjectStore("directories");
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("Penyimpanan folder gagal dibuka."));
+    });
+  }
+
+  async function storeDownloadDirectory(id, directoryHandle) {
+    const db = await openDownloadHandleDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("directories", "readwrite");
+      transaction.objectStore("directories").put(directoryHandle, id);
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => { db.close(); reject(transaction.error || new Error("Izin folder gagal disimpan.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error || new Error("Penyimpanan folder dibatalkan.")); };
+    });
+  }
+
+  async function getDownloadDirectory(id) {
+    const db = await openDownloadHandleDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("directories", "readonly");
+      const request = transaction.objectStore("directories").get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error("Folder unduhan gagal dibuka."));
+      transaction.oncomplete = () => db.close();
+      transaction.onerror = () => { db.close(); reject(transaction.error || new Error("Folder unduhan gagal dibaca.")); };
+    });
+  }
+
+  async function removeDownloadDirectory(id) {
+    const db = await openDownloadHandleDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("directories", "readwrite");
+      transaction.objectStore("directories").delete(id);
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => { db.close(); reject(transaction.error || new Error("Izin folder gagal dihapus.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error || new Error("Penghapusan izin folder dibatalkan.")); };
+    });
+  }
+
+  async function saveVideoOnDevice(button) {
+    const title = button.dataset.title || "Video AniVerse";
+    const server = button.dataset.server || "AniVerse";
+    const quality = button.dataset.quality || "";
+    const sourceUrl = button.dataset.sourceUrl || "";
+    const savedItems = readStore(STORE.downloads);
+    const baseFilename = videoDownloadName(title, quality);
+    const usedFilenames = new Set(savedItems.map((item) => String(item.filename || "").toLowerCase()));
+    const extensionIndex = baseFilename.toLowerCase().lastIndexOf(".mp4");
+    const filenameStem = extensionIndex >= 0 ? baseFilename.slice(0, extensionIndex) : baseFilename;
+    let filename = baseFilename;
+    let copyNumber = 2;
+    while (usedFilenames.has(filename.toLowerCase())) {
+      filename = `${filenameStem} (${copyNumber}).mp4`;
+      copyNumber += 1;
+    }
+    if (!sourceUrl) throw new Error("Sumber video tidak ditemukan.");
+
+    const apiUrl = new URL("/api/video", location.origin);
+    apiUrl.searchParams.set("url", sourceUrl);
+    apiUrl.searchParams.set("download", "true");
+    apiUrl.searchParams.set("filename", filename);
+    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const cacheUrl = deviceDownloadUrl(id);
+    let directoryHandle = null;
+    let fileHandle = null;
+    let writable = null;
+    let storedInBrowser = false;
+    let storedInFolder = false;
+
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        directoryHandle = await window.showDirectoryPicker({ id: "aniverse-downloads", mode: "readwrite" });
+      } catch (error) {
+        if (error?.name === "AbortError") throw new Error("Pemilihan folder dibatalkan.");
+      }
+    }
+
+    if (directoryHandle) {
+      try {
+        await storeDownloadDirectory(id, directoryHandle);
+      } catch (_) {
+        await removeDownloadDirectory(id).catch(() => {});
+        directoryHandle = null;
+      }
+    }
+
+    if (directoryHandle) {
+      try {
+        const response = await fetch(apiUrl.href);
+        if (!response.ok || response.status !== 200) throw new Error(response.status === 400 ? "Sumber video tidak valid." : "Video gagal diunduh lengkap dari sumber.");
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) throw new Error("Sumber tidak mengirimkan file video.");
+        fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+        writable = await fileHandle.createWritable();
+        if (response.body) await response.body.pipeTo(writable);
+        else {
+          await writable.write(await response.blob());
+          await writable.close();
+        }
+        storedInFolder = true;
+      } catch (error) {
+        await removeDownloadDirectory(id).catch(() => {});
+        throw error;
+      }
+    } else if ("caches" in window) {
+      try {
+        if (navigator.storage?.persist) await navigator.storage.persist().catch(() => false);
+        const response = await fetch(apiUrl.href);
+        if (!response.ok || response.status !== 200) throw new Error(response.status === 400 ? "Sumber video tidak valid." : "Video gagal diunduh lengkap dari sumber.");
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) throw new Error("Sumber tidak mengirimkan file video.");
+        const cache = await caches.open(VIDEO_DOWNLOAD_CACHE);
+        await cache.put(cacheUrl, response);
+        storedInBrowser = true;
+      } catch (error) {
+        await caches.open(VIDEO_DOWNLOAD_CACHE).then((cache) => cache.delete(cacheUrl)).catch(() => {});
+        if (error?.name === "QuotaExceededError") throw new Error("Ruang penyimpanan perangkat tidak cukup. Hapus unduhan lain lalu coba lagi.");
+        if (error instanceof TypeError && !navigator.onLine) throw new Error("Sambungkan internet untuk mengunduh video.");
+        throw new Error(error?.message || "Penyimpanan perangkat penuh atau tidak tersedia.");
+      }
+    } else {
+      const link = document.createElement("a");
+      link.href = apiUrl.href;
+      link.download = filename;
+      link.rel = "nofollow";
+      document.body.append(link);
+      link.click();
+      link.remove();
+    }
+
+    const downloads = readStore(STORE.downloads);
+    downloads.unshift({
+      id,
+      title,
+      server,
+      quality,
+      filename,
+      sourceUrl,
+      cacheUrl: storedInBrowser ? cacheUrl : "",
+      downloadUrl: storedInBrowser ? cacheUrl : storedInFolder ? "" : apiUrl.href,
+      storage: storedInFolder ? "filesystem" : storedInBrowser ? "browser" : "native",
+      savedAt: Date.now(),
+    });
+    if (!writeStore(STORE.downloads, downloads)) {
+      if (storedInBrowser) await caches.open(VIDEO_DOWNLOAD_CACHE).then((cache) => cache.delete(cacheUrl)).catch(() => {});
+      if (storedInFolder) {
+        await directoryHandle.removeEntry(filename).catch(() => {});
+        await removeDownloadDirectory(id).catch(() => {});
+      }
+      throw new Error("Penyimpanan daftar unduhan penuh.");
+    }
+    updateAccountStats();
+    return storedInFolder ? "folder" : storedInBrowser ? "browser" : "native";
+  }
+
   function initDownloadCollection() {
     const list = $("#saved-download-list");
     if (!list) return;
@@ -817,24 +1145,50 @@
           <div class="saved-download-body">
             <strong>${escapeHtml(item.title)}</strong>
             <span>${escapeHtml(item.server)}${item.quality ? ` · ${escapeHtml(item.quality)}` : ""}</span>
-            <small>Ditambahkan ${escapeHtml(relativeTime(item.savedAt))}</small>
+            <small>${item.storage === "filesystem" ? "File tersimpan di folder pilihan" : item.cacheUrl ? "Tersimpan offline di browser" : item.storage === "native" ? "Diunduh lewat browser · kelola file lewat aplikasi File" : "Tautan lama · belum tersimpan sebagai video"} · ${escapeHtml(relativeTime(item.savedAt))}</small>
           </div>
-          <a class="btn btn-gold btn-sm" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer nofollow">Buka</a>
-          <button class="icon-btn remove-download" type="button" data-remove-download="${index}" aria-label="Hapus tautan"><svg class="icon"><use href="#i-x"/></svg></button>
+          ${item.downloadUrl || item.cacheUrl ? `<a class="btn btn-gold btn-sm" href="${escapeHtml(item.downloadUrl || item.cacheUrl)}" download="${escapeHtml(item.filename || "aniverse-video.mp4")}">Unduh file</a>` : item.url ? `<a class="btn btn-ghost btn-sm" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer nofollow">Tautan lama</a>` : ""}
+          <button class="icon-btn remove-download" type="button" data-remove-download="${index}" aria-label="Hapus video tersimpan"><svg class="icon"><use href="#i-x"/></svg></button>
         </article>`,
         )
         .join("");
     };
     render();
-    list.addEventListener("click", (event) => {
+    list.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-remove-download]");
       if (!button) return;
       const items = readStore(STORE.downloads);
-      items.splice(Number(button.dataset.removeDownload), 1);
+      const [removed] = items.splice(Number(button.dataset.removeDownload), 1);
+      if (removed?.cacheUrl && "caches" in window) {
+        try {
+          await caches.open(VIDEO_DOWNLOAD_CACHE).then((cache) => cache.delete(removed.cacheUrl));
+        } catch (_) {
+          return toast("Video belum berhasil dihapus. Coba lagi.", "i-info");
+        }
+      }
+      if (removed?.storage === "filesystem" && removed.id) {
+        try {
+          const directory = await getDownloadDirectory(removed.id);
+          if (!directory) throw new Error("Izin folder tidak tersedia. Hapus file lewat aplikasi File.");
+          if (directory.queryPermission) {
+            let permission = await directory.queryPermission({ mode: "readwrite" });
+            if (permission !== "granted" && directory.requestPermission) {
+              permission = await directory.requestPermission({ mode: "readwrite" });
+            }
+            if (permission !== "granted") throw new Error("Izin folder ditolak. Hapus file lewat aplikasi File.");
+          }
+          await directory.removeEntry(removed.filename).catch((error) => {
+            if (error?.name !== "NotFoundError") throw error;
+          });
+          await removeDownloadDirectory(removed.id);
+        } catch (error) {
+          return toast(error.message || "File belum berhasil dihapus.", "i-info");
+        }
+      }
       writeStore(STORE.downloads, items);
       render();
       updateAccountStats();
-      toast("Tautan dihapus", "i-trash");
+      toast(removed?.storage === "filesystem" ? "File video dihapus dari folder" : removed?.cacheUrl ? "Video dihapus dari penyimpanan perangkat" : "Item unduhan dihapus", "i-trash");
     });
   }
 
@@ -967,8 +1321,8 @@
             <button type="button" data-comment-like="${escapeHtml(item.id)}" class="${likedIds.has(item.id) ? "is-liked" : ""}" aria-pressed="${likedIds.has(item.id)}">♥ ${item.likes}</button>
             <button type="button" data-comment-reply-toggle="${escapeHtml(item.id)}">Balas${item.replies.length ? ` · ${item.replies.length}` : ""}</button>
           </div>
-          <form class="reply-form" data-reply-form="${escapeHtml(item.id)}" hidden>
-            <input name="reply" maxlength="300" placeholder="Tulis balasan..." required>
+          <form class="reply-form" data-reply-form="${escapeHtml(item.id)}" autocomplete="off" hidden>
+            <input name="reply" type="text" autocomplete="off" maxlength="300" placeholder="Tulis balasan..." required>
             <button class="btn btn-ghost btn-sm" type="submit">Balas</button>
           </form>
           ${item.replies.map(renderReply).join("")}
@@ -1044,7 +1398,6 @@
       }
       await loadComments();
       updateAccountStats();
-      toast(parentId ? "Balasan dikirim" : "Komentar ditambahkan");
       return true;
     };
 
@@ -1152,23 +1505,29 @@
       return;
     }
 
-    const downloadButton = event.target.closest("[data-save-download]");
+    const downloadButton = event.target.closest("[data-device-download]");
     if (downloadButton) {
-      const downloads = readStore(STORE.downloads).filter((item) => item.url !== downloadButton.dataset.url);
-      downloads.unshift({
-        title: downloadButton.dataset.title,
-        server: downloadButton.dataset.server,
-        quality: downloadButton.dataset.quality,
-        url: downloadButton.dataset.url,
-        image: downloadButton.dataset.image,
-        savedAt: Date.now(),
-      });
-      if (writeStore(STORE.downloads, downloads.slice(0, 100))) {
-        toast("Tautan unduhan disimpan", "i-download");
-        updateAccountStats();
-      } else {
-        toast("Penyimpanan perangkat penuh", "i-info");
-      }
+      event.preventDefault();
+      if (downloadButton.disabled) return;
+      downloadButton.disabled = true;
+      const status = downloadButton.closest("[data-download-item]")?.querySelector("[data-device-download-status]");
+      if (status) status.textContent = "Mengunduh dan menyimpan video…";
+      saveVideoOnDevice(downloadButton)
+        .then((storageMode) => {
+          if (status) {
+            status.textContent = storageMode === "folder"
+              ? "File disimpan ke folder yang dipilih."
+              : storageMode === "browser"
+                ? "Tersimpan offline di perangkat."
+                : "Unduhan dimulai di browser.";
+          }
+          toast(storageMode === "folder" ? "Video disimpan ke folder pilihan" : storageMode === "browser" ? "Video tersimpan offline di perangkat" : "Unduhan video dimulai", "i-download");
+        })
+        .catch((error) => {
+          if (status) status.textContent = error.message || "Video gagal disimpan.";
+          toast(error.message || "Video gagal disimpan", "i-info");
+        })
+        .finally(() => { downloadButton.disabled = false; });
     }
   });
 
@@ -1271,12 +1630,37 @@
     groups.sort((a, b) => b.rank - a.rank);
 
     const qualityControl = $("#player-quality-control");
-    const qualityToggle = $("#player-quality-toggle");
+    const qualityToggle = $("#player-settings-toggle");
     const qualityMenu = $("#player-quality-menu");
-    const qualityLabel = $("#player-quality-label");
     const qualityButtons = $$("#player-quality-menu [data-quality]");
+    const playbackRateButtons = $$("#player-speed-options [data-playback-rate]");
+    const volumeControlPanel = $("#player-volume-control");
+    const volumePopover = $("#player-volume-popover");
+    const volumeControl = $("#player-volume");
+    const volumeLabel = $("#player-volume-value");
+    const audioBoostControl = $("#player-audio-boost");
+    const audioBoostLabel = $("#player-audio-boost-value");
+    const reportButton = $("#player-report");
     const status = $("#player-status");
     const bigPlay = $("#player-play");
+
+    const stage = $("#watch-stage");
+    const nextUrl = stage?.dataset.nextUrl || "";
+    const autoReplayControl = $("#player-auto-replay");
+    const autoContinueControl = $("#player-auto-continue");
+    const endScreen = $("#player-end-screen");
+    const endReplayButton = $("#player-end-replay");
+    const scrub = $("#player-scrub");
+    const scrubBuffer = $("#player-scrub-buffer");
+    const scrubPlayed = $("#player-scrub-played");
+    const scrubKnob = $("#player-scrub-knob");
+    const toggleButton = $("#player-toggle");
+    const muteButton = $("#player-mute");
+    const timeLabel = $("#player-time");
+    const fullscreenButton = $("#player-fullscreen");
+    const gestureLayer = $("#player-gesture-layer");
+    const seekFeedback = $("#player-seek-feedback");
+    const speedFeedback = $("#player-speed-feedback");
 
     const slug = historyNode?.dataset.slug || "";
     const progressKey = `aniverse:progress:${slug}`;
@@ -1296,13 +1680,675 @@
     let upgradeArmed = false;
     let lastSaveAt = 0;
     let resumeApplied = false;
+    let statusTimer = 0;
+    let currentVolume = Math.max(0, Math.min(1, Number(readValue(STORE.volume, 0.8)) || 0));
+    let previousVolume = currentVolume || 0.8;
+    let userMuted = currentVolume === 0;
+    let audioBoost = Math.max(1, Math.min(2, Number(readValue(STORE.audioBoost, 1)) || 1));
+    let configuredPlaybackRate = Math.max(0.5, Math.min(2, Number(readValue(STORE.playbackRate, 1)) || 1));
+    let speedLocked = false;
+    let autoReplay = readValue(STORE.autoReplay, false) === true;
+    let autoContinue = Boolean(nextUrl) && readValue(STORE.autoContinue, false) === true;
+    if (!nextUrl || autoReplay) {
+      autoContinue = false;
+      writeValue(STORE.autoContinue, false);
+    }
+    let audioContext = null;
+    let audioGain = null;
+    let audioGraphAttempted = false;
 
     const setStatus = (text, error = false, quiet = false) => {
       if (!status) return;
       status.textContent = text;
       status.classList.toggle("is-error", Boolean(error));
       status.classList.toggle("is-quiet", Boolean(quiet));
+      window.clearTimeout(statusTimer);
+      // Pesan biasa (mis. "Siap diputar · 720p") hanya perlu sebentar dan
+      // tidak boleh menutupi video saat menonton. Pesan error tetap terlihat.
+      if (!error && !quiet) {
+        statusTimer = window.setTimeout(() => {
+          status.classList.add("is-quiet");
+        }, 3500);
+      }
     };
+
+    /* --- Kontrol pemutar kustom --------------------------------------- */
+
+    let controlsTimer = 0;
+    let scrubbing = false;
+    let scrubWasPlaying = false;
+    let pseudoFullscreen = false;
+    let seekFeedbackTimer = 0;
+    let pendingTap = null;
+    let activeGesture = null;
+
+    const setIcon = (button, iconId) => {
+      const use = button?.querySelector("use");
+      if (use) use.setAttribute("href", `#${iconId}`);
+    };
+
+    const clampNumber = (value, min, max, fallback) => {
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
+    };
+
+    const applyAudioSettings = () => {
+      if (audioGain) {
+        if (audioContext?.state === "suspended") audioContext.resume().catch(() => {});
+        video.volume = 1;
+        audioGain.gain.value = userMuted ? 0 : currentVolume * audioBoost;
+      } else {
+        video.volume = userMuted ? 0 : currentVolume;
+      }
+    };
+
+    const ensureAudioGraph = () => {
+      if (audioGain) {
+        if (audioContext?.state === "suspended") audioContext.resume().catch(() => {});
+        return true;
+      }
+      if (audioGraphAttempted) return false;
+      audioGraphAttempted = true;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return false;
+
+      let source = null;
+      try {
+        audioContext = new AudioContextClass();
+        source = audioContext.createMediaElementSource(video);
+        audioGain = audioContext.createGain();
+        source.connect(audioGain);
+        audioGain.connect(audioContext.destination);
+        applyAudioSettings();
+        if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
+        return true;
+      } catch (_) {
+        // Bila perutean Web Audio gagal, kembalikan audio native agar video
+        // tetap terdengar dengan volume biasa.
+        try {
+          source?.connect(audioContext.destination);
+        } catch (_) {}
+        audioGain = null;
+        video.volume = userMuted ? 0 : currentVolume;
+        return false;
+      }
+    };
+
+    const paintVolume = () => {
+      if (volumeControl) {
+        volumeControl.value = String(Math.round(currentVolume * 100));
+        volumeControl.setAttribute("aria-label", `Volume ${Math.round(currentVolume * 100)} persen`);
+      }
+      if (volumeLabel) volumeLabel.textContent = `${Math.round(currentVolume * 100)}%`;
+      paintMute();
+    };
+
+    const paintAudioBoost = () => {
+      if (audioBoostControl) audioBoostControl.value = String(Math.round(audioBoost * 100));
+      if (audioBoostLabel) audioBoostLabel.textContent = `${Math.round(audioBoost * 100)}%`;
+    };
+
+    const paintPlaybackRate = () => {
+      playbackRateButtons.forEach((button) => {
+        const selected = Number(button.dataset.playbackRate) === configuredPlaybackRate;
+        button.classList.toggle("is-selected", selected);
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
+    };
+
+    const paintAutoSettings = () => {
+      if (autoReplayControl) autoReplayControl.checked = autoReplay;
+      if (autoContinueControl) autoContinueControl.checked = autoContinue;
+    };
+
+    const closeEndScreen = () => {
+      if (endScreen) endScreen.hidden = true;
+      stage?.classList.remove("is-ended");
+    };
+
+    const replayEpisode = () => {
+      closeEndScreen();
+      started = true;
+      ensureAudioGraph();
+      try {
+        video.currentTime = 0;
+      } catch (_) {}
+      video.play().catch(() => {});
+      showControls(false);
+    };
+
+    const setPlaybackRate = (rate) => {
+      const nextRate = clampNumber(rate, 0.5, 2, 1);
+      try {
+        video.playbackRate = nextRate;
+      } catch (_) {}
+    };
+
+    const setConfiguredPlaybackRate = (rate) => {
+      configuredPlaybackRate = clampNumber(rate, 0.5, 2, 1);
+      try {
+        video.defaultPlaybackRate = configuredPlaybackRate;
+      } catch (_) {}
+      setPlaybackRate(configuredPlaybackRate);
+    };
+
+    const toggleMute = () => {
+      if (userMuted || currentVolume === 0) {
+        currentVolume = previousVolume || 0.8;
+        userMuted = false;
+      } else {
+        previousVolume = currentVolume;
+        userMuted = true;
+      }
+      writeValue(STORE.volume, currentVolume);
+      applyAudioSettings();
+      paintVolume();
+      showControls();
+    };
+
+    const showControls = (autoHide = true) => {
+      if (!stage) return;
+      stage.classList.add("is-controls");
+      stage.classList.remove("is-idle");
+      window.clearTimeout(controlsTimer);
+      if (!autoHide) return;
+      if (video.paused || scrubbing || (qualityMenu && !qualityMenu.hidden) || (volumePopover && !volumePopover.hidden)) return;
+      controlsTimer = window.setTimeout(() => {
+        if (video.paused || scrubbing || (qualityMenu && !qualityMenu.hidden) || (volumePopover && !volumePopover.hidden)) return;
+        stage.classList.add("is-idle");
+        stage.classList.remove("is-controls");
+      }, 2600);
+    };
+
+    const hideControlsSoon = () => {
+      window.clearTimeout(controlsTimer);
+      controlsTimer = window.setTimeout(() => {
+        if (!video.paused && !scrubbing && !(qualityMenu && !qualityMenu.hidden) && !(volumePopover && !volumePopover.hidden)) {
+          stage?.classList.add("is-idle");
+          stage?.classList.remove("is-controls");
+        }
+      }, 1600);
+    };
+
+    const paintPlayed = (ratio) => {
+      const percent = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+      if (scrubPlayed) scrubPlayed.style.width = percent;
+      if (scrubKnob) scrubKnob.style.left = percent;
+    };
+
+    const paintBuffer = () => {
+      if (!scrubBuffer) return;
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      if (duration <= 0) {
+        scrubBuffer.style.width = "0%";
+        return;
+      }
+      let bufferedEnd = 0;
+      try {
+        if (video.buffered.length) bufferedEnd = video.buffered.end(video.buffered.length - 1);
+      } catch (_) {
+        bufferedEnd = 0;
+      }
+      scrubBuffer.style.width = `${Math.min(100, (bufferedEnd / duration) * 100)}%`;
+    };
+
+    const paintTime = () => {
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      const current = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, video.currentTime || 0));
+      if (timeLabel) {
+        timeLabel.textContent = `${formatDuration(current)} / ${formatDuration(duration)}`;
+      }
+      const ratio = duration > 0 ? current / duration : 0;
+      if (!scrubbing) paintPlayed(ratio);
+      scrub?.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
+      paintBuffer();
+    };
+
+    const paintPlay = () => {
+      const paused = video.paused || video.ended;
+      setIcon(toggleButton, paused ? "i-play" : "i-pause");
+      toggleButton?.setAttribute("aria-label", paused ? "Putar" : "Jeda");
+      if (started && bigPlay) bigPlay.classList.toggle("is-hidden", !paused);
+    };
+
+    const paintMute = () => {
+      const muted = userMuted || currentVolume === 0;
+      setIcon(muteButton, muted ? "i-volume-mute" : "i-volume");
+      muteButton?.setAttribute("aria-label", muted ? "Nyalakan suara" : "Bisukan");
+    };
+
+    const togglePlay = () => {
+      ensureAudioGraph();
+      if (!started) {
+        startPlayback();
+        return;
+      }
+      if (video.paused || video.ended) {
+        if (video.ended) {
+          try {
+            video.currentTime = 0;
+          } catch (_) {}
+        }
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+      showControls();
+    };
+
+    const seekTo = (time) => {
+      if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+      const next = Math.max(0, Math.min(video.duration, time));
+      try {
+        video.currentTime = next;
+      } catch (_) {}
+      paintTime();
+      showControls();
+    };
+
+    const ratioFromPointer = (event) => {
+      if (!scrub) return 0;
+      const rect = scrub.getBoundingClientRect();
+      if (rect.width <= 0) return 0;
+      return Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    };
+
+    const showSeekFeedback = (direction) => {
+      if (!seekFeedback) return;
+      seekFeedback.textContent = direction < 0 ? "−10 dtk" : "+10 dtk";
+      seekFeedback.classList.toggle("is-left", direction < 0);
+      seekFeedback.classList.toggle("is-right", direction > 0);
+      seekFeedback.classList.add("is-visible");
+      window.clearTimeout(seekFeedbackTimer);
+      seekFeedbackTimer = window.setTimeout(() => seekFeedback.classList.remove("is-visible"), 650);
+    };
+
+    const showSpeedFeedback = (locked, text = "2×") => {
+      if (!speedFeedback) return;
+      speedFeedback.textContent = locked ? "2× terkunci" : text;
+      speedFeedback.classList.toggle("is-locked", locked);
+      speedFeedback.classList.add("is-visible");
+    };
+
+    const hideSpeedFeedback = () => {
+      if (!speedFeedback || speedLocked) return;
+      speedFeedback.classList.remove("is-visible", "is-locked");
+    };
+
+    const gestureZone = (clientX) => {
+      const bounds = gestureLayer?.getBoundingClientRect();
+      if (!bounds || bounds.width <= 0) return "center";
+      const position = (clientX - bounds.left) / bounds.width;
+      if (position < 0.34) return "left";
+      if (position > 0.66) return "right";
+      return "center";
+    };
+
+    const handleGestureDown = (event) => {
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      if (activeGesture) return;
+      event.preventDefault();
+      suppressTouchClick = true;
+
+      const priorTap = pendingTap;
+      if (priorTap) {
+        window.clearTimeout(priorTap.timer);
+        pendingTap = null;
+      }
+
+      activeGesture = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        zone: gestureZone(event.clientX),
+        startedAt: Date.now(),
+        lockedAtStart: speedLocked,
+        priorTap,
+        moved: false,
+        held: false,
+        holdTimer: 0,
+      };
+
+      activeGesture.holdTimer = window.setTimeout(() => {
+        if (!activeGesture || activeGesture.moved) return;
+        activeGesture.held = true;
+        if (!activeGesture.lockedAtStart) setPlaybackRate(2);
+        showSpeedFeedback(activeGesture.lockedAtStart, activeGesture.lockedAtStart ? "Geser ke atas" : "2×");
+        showControls(false);
+      }, 420);
+
+      try {
+        gestureLayer.setPointerCapture(event.pointerId);
+      } catch (_) {}
+      showControls(false);
+    };
+
+    const handleGestureMove = (event) => {
+      const gesture = activeGesture;
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+      event.preventDefault();
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+      if (!gesture.held && (Math.abs(deltaX) > 18 || Math.abs(deltaY) > 18)) {
+        gesture.moved = true;
+        window.clearTimeout(gesture.holdTimer);
+      }
+      if (!gesture.held) return;
+
+      if (!gesture.lockedAtStart && !speedLocked && deltaY > 58) {
+        speedLocked = true;
+        setPlaybackRate(2);
+        showSpeedFeedback(true);
+      } else if (gesture.lockedAtStart && speedLocked && deltaY < -58) {
+        speedLocked = false;
+        setPlaybackRate(configuredPlaybackRate);
+        showSpeedFeedback(false, `${configuredPlaybackRate}×`);
+        window.setTimeout(hideSpeedFeedback, 600);
+      }
+    };
+
+    const finishGesture = (event, cancelled = false) => {
+      const gesture = activeGesture;
+      if (!gesture || (event && event.pointerId !== gesture.pointerId)) return;
+      window.clearTimeout(gesture.holdTimer);
+      activeGesture = null;
+
+      if (gesture.held) {
+        if (!speedLocked && !gesture.lockedAtStart) {
+          setPlaybackRate(configuredPlaybackRate);
+          hideSpeedFeedback();
+        }
+      } else if (!cancelled && !gesture.moved && Date.now() - gesture.startedAt < 360) {
+        const now = Date.now();
+        const prior = gesture.priorTap;
+        if (prior && prior.zone === gesture.zone && now - prior.at <= 320) {
+          if (gesture.zone === "left") {
+            seekTo((video.currentTime || 0) - 10);
+            showSeekFeedback(-1);
+          } else if (gesture.zone === "right") {
+            seekTo((video.currentTime || 0) + 10);
+            showSeekFeedback(1);
+          } else {
+            togglePlay();
+          }
+        } else {
+          if (prior) togglePlay();
+          const tap = { zone: gesture.zone, at: now, timer: 0 };
+          tap.timer = window.setTimeout(() => {
+            if (pendingTap !== tap) return;
+            pendingTap = null;
+            togglePlay();
+          }, 300);
+          pendingTap = tap;
+        }
+      }
+
+      window.setTimeout(() => {
+        suppressTouchClick = false;
+      }, 0);
+      showControls();
+    };
+
+    gestureLayer?.addEventListener("pointerdown", handleGestureDown);
+    gestureLayer?.addEventListener("pointermove", handleGestureMove);
+    gestureLayer?.addEventListener("pointerup", (event) => finishGesture(event));
+    gestureLayer?.addEventListener("pointercancel", (event) => finishGesture(event, true));
+    gestureLayer?.addEventListener("contextmenu", (event) => event.preventDefault());
+
+    /* --- Layar penuh + orientasi landscape ---------------------------- */
+
+    const fullscreenElement = () =>
+      document.fullscreenElement || document.webkitFullscreenElement || null;
+
+    const isFullscreen = () => Boolean(fullscreenElement()) || pseudoFullscreen;
+
+    const syncFullscreenIcon = () => {
+      setIcon(fullscreenButton, isFullscreen() ? "i-compress" : "i-expand");
+      fullscreenButton?.setAttribute(
+        "aria-label",
+        isFullscreen() ? "Keluar layar penuh" : "Layar penuh",
+      );
+    };
+
+    const lockLandscape = () => {
+      try {
+        const promise = screen.orientation?.lock?.("landscape");
+        promise?.catch?.(() => {});
+      } catch (_) {}
+    };
+
+    const unlockOrientation = () => {
+      try {
+        screen.orientation?.unlock?.();
+      } catch (_) {}
+    };
+
+    const enterPseudoFullscreen = () => {
+      pseudoFullscreen = true;
+      stage?.classList.add("is-pseudo-fullscreen");
+      document.body.classList.add("player-fs-open");
+      syncFullscreenIcon();
+    };
+
+    const exitPseudoFullscreen = () => {
+      pseudoFullscreen = false;
+      stage?.classList.remove("is-pseudo-fullscreen");
+      document.body.classList.remove("player-fs-open");
+      syncFullscreenIcon();
+    };
+
+    const enterFullscreen = () => {
+      const element = stage || video;
+      const request =
+        element.requestFullscreen || element.webkitRequestFullscreen || element.msRequestFullscreen;
+      if (!request) {
+        enterPseudoFullscreen();
+        lockLandscape();
+        return;
+      }
+      let result;
+      try {
+        result = request.call(element);
+      } catch (_) {
+        enterPseudoFullscreen();
+        lockLandscape();
+        return;
+      }
+      if (result?.catch) {
+        result.catch(() => {
+          enterPseudoFullscreen();
+          lockLandscape();
+        });
+      }
+      lockLandscape();
+      syncFullscreenIcon();
+      showControls(false);
+    };
+
+    const exitFullscreen = () => {
+      try {
+        if (document.exitFullscreen && document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        } else if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
+          document.webkitExitFullscreen();
+        }
+      } catch (_) {}
+      exitPseudoFullscreen();
+      unlockOrientation();
+    };
+
+    const toggleFullscreen = () => {
+      if (isFullscreen()) exitFullscreen();
+      else enterFullscreen();
+      showControls(false);
+    };
+
+    const onFullscreenChange = () => {
+      if (fullscreenElement()) {
+        syncFullscreenIcon();
+        showControls(false);
+        lockLandscape();
+      } else {
+        if (!pseudoFullscreen) unlockOrientation();
+        exitPseudoFullscreen();
+        syncFullscreenIcon();
+      }
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+    /* --- Events ------------------------------------------------------- */
+
+    stage?.addEventListener("pointermove", () => showControls());
+    stage?.addEventListener("pointerdown", () => showControls());
+    stage?.addEventListener("pointerleave", () => {
+      if (!video.paused) hideControlsSoon();
+    });
+
+    toggleButton?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      togglePlay();
+    });
+
+    fullscreenButton?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleFullscreen();
+    });
+
+    scrub?.addEventListener("pointerdown", (event) => {
+      if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      scrubbing = true;
+      scrubWasPlaying = !video.paused && !video.ended;
+      if (scrubWasPlaying) video.pause();
+      stage?.classList.add("is-scrubbing");
+      showControls(false);
+      try {
+        scrub.setPointerCapture(event.pointerId);
+      } catch (_) {}
+      paintPlayed(ratioFromPointer(event));
+    });
+
+    scrub?.addEventListener("pointermove", (event) => {
+      if (!scrubbing) return;
+      paintPlayed(ratioFromPointer(event));
+    });
+
+    const finishScrub = (event) => {
+      if (!scrubbing) return;
+      scrubbing = false;
+      stage?.classList.remove("is-scrubbing");
+      seekTo(ratioFromPointer(event) * (video.duration || 0));
+      if (scrubWasPlaying) video.play().catch(() => {});
+      showControls();
+    };
+
+    scrub?.addEventListener("pointerup", finishScrub);
+    scrub?.addEventListener("pointercancel", finishScrub);
+
+    scrub?.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        seekTo((video.currentTime || 0) + 5);
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+        event.preventDefault();
+        event.stopPropagation();
+        seekTo((video.currentTime || 0) - 5);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        event.stopPropagation();
+        seekTo(0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        event.stopPropagation();
+        seekTo((video.duration || 0) - 0.5);
+      } else if (event.key === " " || event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        togglePlay();
+      }
+    });
+
+    video.addEventListener("play", () => {
+      paintPlay();
+      showControls();
+    });
+    video.addEventListener("playing", () => {
+      closeEndScreen();
+      paintPlay();
+      showControls();
+    });
+    video.addEventListener("pause", () => {
+      paintPlay();
+      showControls(false);
+    });
+    video.addEventListener("ended", () => {
+      paintPlay();
+      showControls(false);
+    });
+    video.addEventListener("volumechange", paintMute);
+    video.addEventListener("timeupdate", paintTime);
+    video.addEventListener("progress", paintBuffer);
+    video.addEventListener("loadedmetadata", paintTime);
+    video.addEventListener("durationchange", paintTime);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.defaultPrevented) return;
+      if (event.target === scrub) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("button, a, input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      if (event.key === "Escape" && pseudoFullscreen) {
+        event.preventDefault();
+        exitFullscreen();
+        return;
+      }
+      if (!stage) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "f") {
+        event.preventDefault();
+        toggleFullscreen();
+      } else if (key === "m") {
+        event.preventDefault();
+        toggleMute();
+      } else if (key === " " || key === "k") {
+        event.preventDefault();
+        togglePlay();
+      } else if (key === "j" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        showControls();
+        seekTo((video.currentTime || 0) - 5);
+      } else if (key === "l" || event.key === "ArrowRight") {
+        event.preventDefault();
+        showControls();
+        seekTo((video.currentTime || 0) + 5);
+      }
+    });
+
+    applyAudioSettings();
+    setConfiguredPlaybackRate(configuredPlaybackRate);
+    if (audioBoostControl && !window.AudioContext && !window.webkitAudioContext) {
+      audioBoost = 1;
+      writeValue(STORE.audioBoost, audioBoost);
+      audioBoostControl.disabled = true;
+      audioBoostControl.title = "Penguat suara tidak didukung browser ini";
+    }
+    paintMute();
+    paintVolume();
+    paintAudioBoost();
+    paintPlaybackRate();
+    paintAutoSettings();
+    paintPlay();
+    paintTime();
+    showControls(false);
 
     const paintQuality = () => {
       qualityButtons.forEach((button) => {
@@ -1312,16 +2358,11 @@
         button.classList.toggle("is-selected", active);
         button.setAttribute("aria-checked", active ? "true" : "false");
       });
-      const text =
-        mode === "auto"
-          ? group
-            ? `Otomatis · ${group.quality}`
-            : "Otomatis"
-          : group
-            ? group.quality
-            : mode;
-      if (qualityLabel) qualityLabel.textContent = text;
-      if (qualityToggle) qualityToggle.setAttribute("aria-label", `Resolusi ${text}`);
+      const text = group?.quality || (mode === "auto" ? "Otomatis" : mode);
+      if (qualityToggle) {
+        const selectedMode = mode === "auto" ? `Otomatis, ${text}` : text;
+        qualityToggle.setAttribute("aria-label", `Pengaturan pemutar, resolusi ${selectedMode}`);
+      }
     };
 
     const connectionInfo = () => {
@@ -1384,6 +2425,7 @@
       if (video.getAttribute("src") !== sourceUrl) {
         video.src = sourceUrl;
         video.load();
+        setPlaybackRate(speedLocked ? 2 : configuredPlaybackRate);
       }
 
       const resumeAt = () => {
@@ -1455,6 +2497,7 @@
 
     const startPlayback = () => {
       started = true;
+      ensureAudioGraph();
       if (!group) group = mode === "auto" ? pickAutoGroup() : groups.find((entry) => entry.quality === mode) || pickAutoGroup();
       if (!group) {
         setStatus("Tidak ada sumber yang bisa diputar", true);
@@ -1464,6 +2507,11 @@
       if (!video.src) {
         loadCurrent(true);
       } else {
+        if (video.ended) {
+          try {
+            video.currentTime = 0;
+          } catch (_) {}
+        }
         video.play().catch(() => {
           if (bigPlay) bigPlay.classList.remove("is-hidden");
         });
@@ -1476,28 +2524,111 @@
     } else {
       group = mode === "auto" ? pickAutoGroup() : groups.find((entry) => entry.quality === mode) || pickAutoGroup();
       paintQuality();
-      setStatus(`Siap diputar · ${mode === "auto" ? "Otomatis" : group.quality}`);
+      setStatus(`Siap diputar · ${mode === "auto" ? "Otomatis" : group?.quality || mode}`);
     }
 
     bigPlay?.addEventListener("click", startPlayback);
-    video.addEventListener("click", () => {
-      if (!started) startPlayback();
+    let suppressTouchClick = false;
+    gestureLayer?.addEventListener("click", (event) => {
+      if (suppressTouchClick || event.pointerType === "touch" || event.pointerType === "pen") return;
+      if (!started) {
+        startPlayback();
+        return;
+      }
+      togglePlay();
+    });
+    gestureLayer?.addEventListener("dblclick", (event) => {
+      if (event.pointerType === "touch" || event.pointerType === "pen") return;
+      event.preventDefault();
+      toggleFullscreen();
     });
 
     const closeQualityMenu = (restoreFocus = false) => {
       if (!qualityMenu || !qualityToggle) return;
       qualityMenu.hidden = true;
+      qualityMenu.classList.remove("opens-down", "opens-up");
+      qualityMenu.style.maxHeight = "";
       qualityToggle.setAttribute("aria-expanded", "false");
       qualityControl?.classList.remove("is-open");
+      showControls();
       if (restoreFocus) qualityToggle.focus();
+    };
+
+    const positionQualityMenu = () => {
+      if (!qualityMenu || !qualityToggle || qualityMenu.hidden) return;
+
+      const visualViewport = window.visualViewport;
+      const viewportTop = visualViewport?.offsetTop || 0;
+      const viewportBottom = viewportTop + (visualViewport?.height || window.innerHeight);
+      let topLimit = viewportTop + 8;
+      let bottomLimit = viewportBottom - 8;
+      const header = $(".topbar");
+      const headerRect = header?.getBoundingClientRect();
+      if (headerRect && headerRect.top <= viewportBottom && headerRect.bottom > viewportTop) {
+        topLimit = Math.max(topLimit, headerRect.bottom + 6);
+      }
+      const bottomNav = $(".bottom-nav");
+      const bottomNavRect = bottomNav?.getBoundingClientRect();
+      if (
+        bottomNav &&
+        getComputedStyle(bottomNav).display !== "none" &&
+        bottomNavRect.top < viewportBottom &&
+        bottomNavRect.bottom > viewportTop
+      ) {
+        bottomLimit = Math.min(bottomLimit, bottomNavRect.top - 6);
+      }
+
+      qualityMenu.style.maxHeight = "none";
+      const menuHeight = qualityMenu.getBoundingClientRect().height;
+      const toggleRect = qualityToggle.getBoundingClientRect();
+      const spaceAbove = Math.max(0, toggleRect.top - topLimit - 8);
+      const spaceBelow = Math.max(0, bottomLimit - toggleRect.bottom - 8);
+      const opensDown = menuHeight > spaceAbove && (menuHeight <= spaceBelow || spaceBelow > spaceAbove);
+      const availableSpace = opensDown ? spaceBelow : spaceAbove;
+
+      qualityMenu.classList.toggle("opens-down", opensDown);
+      qualityMenu.classList.toggle("opens-up", !opensDown);
+      qualityMenu.style.maxHeight = `${Math.max(0, Math.min(menuHeight, availableSpace))}px`;
+    };
+
+    window.addEventListener("resize", positionQualityMenu, { passive: true });
+    window.visualViewport?.addEventListener("resize", positionQualityMenu, { passive: true });
+    window.addEventListener("scroll", positionQualityMenu, { passive: true });
+
+    const closeVolumePopover = (restoreFocus = false) => {
+      if (!volumePopover || !muteButton || volumePopover.hidden) return;
+      volumePopover.hidden = true;
+      muteButton.setAttribute("aria-expanded", "false");
+      volumeControlPanel?.classList.remove("is-open");
+      showControls();
+      if (restoreFocus) muteButton.focus();
+    };
+
+    const openVolumePopover = () => {
+      if (!volumePopover || !muteButton) return;
+      closeQualityMenu();
+      volumePopover.hidden = false;
+      muteButton.setAttribute("aria-expanded", "true");
+      volumeControlPanel?.classList.add("is-open");
+      showControls(false);
     };
 
     const openQualityMenu = () => {
       if (!qualityMenu || !qualityToggle) return;
+      closeVolumePopover();
       qualityMenu.hidden = false;
       qualityToggle.setAttribute("aria-expanded", "true");
       qualityControl?.classList.add("is-open");
+      qualityMenu.scrollTop = 0;
+      showControls(false);
+      positionQualityMenu();
     };
+
+    muteButton?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleMute();
+      openVolumePopover();
+    });
 
     qualityToggle?.addEventListener("click", () => {
       if (qualityMenu?.hidden) openQualityMenu();
@@ -1514,12 +2645,97 @@
       });
     });
 
+    playbackRateButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setConfiguredPlaybackRate(button.dataset.playbackRate);
+        speedLocked = false;
+        writeValue(STORE.playbackRate, configuredPlaybackRate);
+        paintPlaybackRate();
+        if (speedFeedback) speedFeedback.classList.remove("is-visible", "is-locked");
+        showControls(false);
+      });
+    });
+
+    autoReplayControl?.addEventListener("change", () => {
+      autoReplay = autoReplayControl.checked;
+      if (autoReplay) autoContinue = false;
+      writeValue(STORE.autoReplay, autoReplay);
+      writeValue(STORE.autoContinue, autoContinue);
+      paintAutoSettings();
+      if (autoReplay && video.ended) {
+        closeQualityMenu();
+        replayEpisode();
+      }
+    });
+
+    autoContinueControl?.addEventListener("change", () => {
+      autoContinue = Boolean(nextUrl) && autoContinueControl.checked;
+      if (autoContinue) autoReplay = false;
+      writeValue(STORE.autoReplay, autoReplay);
+      writeValue(STORE.autoContinue, autoContinue);
+      paintAutoSettings();
+      if (autoContinue && video.ended) window.location.assign(nextUrl);
+    });
+
+    endReplayButton?.addEventListener("click", replayEpisode);
+
+    volumeControl?.addEventListener("input", () => {
+      currentVolume = clampNumber(volumeControl.value, 0, 100, 80) / 100;
+      if (currentVolume > 0) {
+        previousVolume = currentVolume;
+        userMuted = false;
+      } else {
+        userMuted = true;
+      }
+      writeValue(STORE.volume, currentVolume);
+      applyAudioSettings();
+      paintVolume();
+      showControls();
+    });
+
+    audioBoostControl?.addEventListener("input", () => {
+      const nextBoost = clampNumber(audioBoostControl.value, 100, 200, 100) / 100;
+      if (nextBoost > 1 && !ensureAudioGraph()) {
+        audioBoost = 1;
+        writeValue(STORE.audioBoost, audioBoost);
+        paintAudioBoost();
+        toast("Penguat suara tidak didukung browser ini", "i-info");
+        return;
+      }
+      audioBoost = nextBoost;
+      writeValue(STORE.audioBoost, audioBoost);
+      applyAudioSettings();
+      paintAudioBoost();
+      showControls(false);
+    });
+
+    reportButton?.addEventListener("click", async () => {
+      const reportText = `Laporan masalah pemutaran: ${document.title}\n${window.location.href}`;
+      closeQualityMenu();
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: "Laporkan masalah pemutaran", text: reportText });
+          return;
+        } catch (error) {
+          if (error?.name === "AbortError") return;
+        }
+      }
+      try {
+        await navigator.clipboard.writeText(reportText);
+        toast("Detail laporan disalin. Kirim ke pengelola anime.", "i-check");
+      } catch (_) {
+        window.prompt("Salin detail laporan ini", reportText);
+      }
+    });
+
     document.addEventListener("click", (event) => {
       if (qualityControl && !qualityControl.contains(event.target)) closeQualityMenu();
+      if (volumeControlPanel && !volumeControlPanel.contains(event.target)) closeVolumePopover();
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && qualityMenu && !qualityMenu.hidden) {
-        closeQualityMenu(true);
+      if (event.key === "Escape") {
+        if (qualityMenu && !qualityMenu.hidden) closeQualityMenu(true);
+        if (volumePopover && !volumePopover.hidden) closeVolumePopover(true);
       } else if (
         event.key === "ArrowDown" &&
         document.activeElement === qualityToggle &&
@@ -1532,6 +2748,7 @@
     });
 
     video.addEventListener("loadedmetadata", () => {
+      setPlaybackRate(speedLocked ? 2 : configuredPlaybackRate);
       if (!resumeApplied) {
         resumeApplied = true;
         const saved = readValue(progressKey, null);
@@ -1637,12 +2854,22 @@
       writeValue(progressKey, { position: 0, duration: video.duration || 0, at: Date.now() });
       updateHistoryEntry(slug, { progress: 100 });
       setStatus("Selesai");
-      if (historyNode) {
-        const next = $(".episode-nav a[href*='/watch/']:last-child");
-        if (next && /berikutnya/i.test(next.textContent)) {
-          toast("Episode selesai. Episode berikutnya tersedia.", "i-check");
-        }
+      closeQualityMenu();
+      closeVolumePopover();
+      bigPlay?.classList.add("is-hidden");
+      if (autoContinue && nextUrl) {
+        window.location.assign(nextUrl);
+        return;
       }
+      if (autoReplay) {
+        replayEpisode();
+        return;
+      }
+      if (endScreen) {
+        endScreen.hidden = false;
+        stage?.classList.add("is-ended");
+      }
+      showControls(false);
     });
 
     navigator.connection?.addEventListener?.("change", () => {
@@ -1692,6 +2919,7 @@
      --------------------------------------------------------- */
 
   applyImageFallbacks();
+  makeWatchTitleDisplayOnly();
   paintBookmarkButtons();
   renderContinueWatching();
   renderBookmarkPage();

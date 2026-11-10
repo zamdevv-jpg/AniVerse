@@ -2,7 +2,7 @@
 
 Situs streaming anime subtitle Indonesia dengan backend **Rust (Axum)**, halaman server-side (MiniJinja), dan tampilan gelap beraksen emas bergaya Wibuku. Data katalog, detail, dan episode diambil dari **Nimegami** (`https://nimegami.id`). Jadwal rilis memakai kelompok hari dari MyAnimeList.
 
-Versi aplikasi saat ini: **0.1.2**.
+Versi aplikasi saat ini: **0.1.3**.
 
 ## Fitur
 
@@ -149,12 +149,14 @@ otakunime-rust/
 ## Build desktop dan Android (Tauri 2)
 
 - Binary server Windows: `cargo build --release` menghasilkan `target/release/otakunime.exe`.
-- Installer desktop Windows: `cargo tauri build --ci --bundles nsis` menghasilkan installer NSIS `.exe`. MSI dapat dibuat dengan `cargo tauri build --ci --bundles msi` jika layanan Windows Installer tersedia.
-- Android APK: `cargo tauri android build --apk`.
+- Versi rilis saat ini: **0.1.3**.
+- Artefak Windows x64: MSI `dist/windows/AniVerse_0.1.3_x64_en-US.msi`, installer NSIS `dist/windows/AniVerse_0.1.3_x64-setup.exe`, dan aplikasi portable `dist/windows/AniVerse_0.1.3_x64-portable.exe`.
+- APK Android arm64: `dist/android/AniVerse_0.1.3_arm64-release.apk` (`versionCode` 1003).
+- Build Windows standar: `cargo tauri build --no-bundle --ci --target x86_64-pc-windows-msvc`, `cargo tauri build --ci --bundles nsis --target x86_64-pc-windows-msvc`, dan `cargo tauri build --ci --bundles msi --target x86_64-pc-windows-msvc` dari `src-tauri/`.
+- APK: `cargo tauri android build --apk --target aarch64 --split-per-abi` dari `src-tauri/`. Di Windows yang melarang symbolic link, library native dapat disalin sebagai file biasa ke folder `jniLibs`, lalu paketkan dengan Gradle.
 - Android AAB: `cargo tauri android build --aab`.
 - Paket distribusi rilis disimpan di `dist/android/` dan `dist/windows/`.
-- Artefak rilis 0.1.2 yang tersedia: `dist/android/AniVerse_0.1.2_arm64-release.apk` dan `dist/windows/AniVerse_0.1.2_x64-setup.exe`. APK ditandatangani untuk arm64; MSI tidak dihasilkan pada build ini karena layanan Windows Installer tidak dapat diakses.
-- Ringkasan perintah, hasil build, verifikasi APK, dan kendala MSI ada di `release-logs/0.1.2-build.md`.
+- Rincian build, verifikasi APK, dan catatan validasi MSI 0.1.3 ada di `release-logs/0.1.3-build.md`; catatan rilis sebelumnya ada di `release-logs/0.1.2-build.md`.
 - Login dan profil menggunakan Supabase Auth/Database; komentar, balasan, dan suka tersinkron untuk semua pengguna melalui Supabase. Bookmark, histori tontonan, serta tautan unduhan tetap tersimpan per perangkat.
 - Android menggunakan package ID `com.otakunime.desktop`. Release harus memakai keystore dan password Anda sendiri. Konfigurasi lokal `src-tauri/gen/android/app/signing.properties` dibaca untuk release dan sudah dikecualikan dari Git; jangan commit file itu atau `release.keystore`. Alternatifnya, isi variabel lingkungan `OTAKUNIME_ANDROID_KEYSTORE`, `OTAKUNIME_ANDROID_STORE_PASSWORD`, `OTAKUNIME_ANDROID_KEY_ALIAS`, dan `OTAKUNIME_ANDROID_KEY_PASSWORD`.
 - Jangan membagikan atau menghapus keystore yang dipakai untuk menandatangani rilis Play Store; semua pembaruan aplikasi perlu identitas signing yang sama.

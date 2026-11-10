@@ -5,52 +5,143 @@
 <nav class="breadcrumbs" aria-label="Breadcrumb">
   <a href="/">Beranda</a>
   <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-  {% if series %}<a href="/anime/{{ series.slug|urlencode }}">{{ series.title }}</a>{% else %}<span>{{ episode.series_title }}</span>{% endif %}
+  {% if series %}<span>{{ series.title }}</span>{% else %}<span>{{ episode.series_title }}</span>{% endif %}
   <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
   <span>Episode {{ episode.episode_number }}</span>
 </nav>
 
 <div class="watch-layout">
   <div class="watch-main">
-    <div class="watch-stage" id="watch-stage">
+    <div class="watch-stage" id="watch-stage" data-next-url="{{ next_url }}">
       <video
         id="video-player"
         class="video-player"
-        controls
         playsinline
         preload="metadata"
         poster="{{ episode.series_image|poster }}"></video>
-      {% if available_qualities > 0 %}
-      <div class="player-quality-control" id="player-quality-control">
-        <button
-          class="player-quality-toggle"
-          id="player-quality-toggle"
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded="false"
-          aria-controls="player-quality-menu">
-          <svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg>
-          <span id="player-quality-label">Otomatis</span>
-          <svg class="icon player-quality-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
-        </button>
-        <div class="player-quality-menu" id="player-quality-menu" role="menu" aria-label="Pilih resolusi" hidden>
-          <button class="player-quality-option is-selected" type="button" role="menuitemradio" data-quality="auto" aria-checked="true">
-            <span>Otomatis</span><small>Menyesuaikan jaringan</small>
-          </button>
-          {% for q in episode.qualities %}
-          {% if q.available %}
-          <button class="player-quality-option" type="button" role="menuitemradio" data-quality="{{ q.quality }}" aria-checked="false">
-            <span>{{ q.quality }}</span><small>{{ q.count }} sumber tersedia</small>
-          </button>
-          {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
       <button class="player-big-play" id="player-play" type="button" aria-label="Putar episode">
         <svg class="icon fill" aria-hidden="true"><use href="#i-play"/></svg>
       </button>
       <div class="player-status" id="player-status">Siap diputar · Otomatis</div>
+      <div class="player-gesture-layer" id="player-gesture-layer" aria-hidden="true">
+        <span class="player-seek-feedback" id="player-seek-feedback"></span>
+        <span class="player-speed-feedback" id="player-speed-feedback">2×</span>
+      </div>
+
+      <div class="player-end-screen" id="player-end-screen" hidden>
+        <div class="player-end-card">
+          <svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>
+          <h2>Episode selesai</h2>
+          <p>Pilih untuk memutar ulang atau melanjutkan menonton.</p>
+          <div class="player-end-actions">
+            <button class="player-end-action is-primary" id="player-end-replay" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> Putar ulang
+            </button>
+            {% if next_url %}
+            <a class="player-end-action" href="{{ next_url }}">
+              Episode berikutnya <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="player-controls" id="player-controls">
+        <div
+          class="player-scrub"
+          id="player-scrub"
+          role="slider"
+          tabindex="0"
+          aria-label="Posisi video"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0">
+          <span class="player-scrub-buffer" id="player-scrub-buffer"></span>
+          <span class="player-scrub-played" id="player-scrub-played"></span>
+          <span class="player-scrub-knob" id="player-scrub-knob"></span>
+        </div>
+        <div class="player-bar">
+          <button class="player-btn" id="player-toggle" type="button" aria-label="Putar">
+            <svg class="icon fill" aria-hidden="true"><use href="#i-play"/></svg>
+          </button>
+          <div class="player-volume-control" id="player-volume-control">
+            <button class="player-btn" id="player-mute" type="button" aria-label="Bisukan" aria-expanded="false" aria-controls="player-volume-popover">
+              <svg class="icon" aria-hidden="true"><use href="#i-volume"/></svg>
+            </button>
+            <div class="player-volume-popover" id="player-volume-popover" hidden>
+              <input class="player-volume" id="player-volume" type="range" min="0" max="100" step="1" value="80" aria-label="Volume 0 sampai 100 persen">
+              <output id="player-volume-value">80%</output>
+            </div>
+          </div>
+          <span class="player-time" id="player-time">0:00 / 0:00</span>
+          <span class="player-bar-spacer"></span>
+          <div class="player-quality-control" id="player-quality-control">
+            <button
+              class="player-settings-toggle"
+              id="player-settings-toggle"
+              type="button"
+              aria-label="Pengaturan pemutar"
+              title="Pengaturan pemutar"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+              aria-controls="player-quality-menu">
+              <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>
+            </button>
+            <div class="player-quality-menu player-settings-menu" id="player-quality-menu" role="dialog" aria-label="Pengaturan pemutar" hidden>
+              <section class="player-settings-section">
+                <h3>Resolusi</h3>
+                <div class="player-quality-options" role="radiogroup" aria-label="Pilih resolusi">
+                  <button class="player-quality-option is-selected" type="button" role="radio" data-quality="auto" aria-checked="true">
+                    <span>Otomatis</span><small>Menyesuaikan jaringan</small>
+                  </button>
+                  {% for q in episode.qualities %}
+                  {% if q.available %}
+                  <button class="player-quality-option" type="button" role="radio" data-quality="{{ q.quality }}" aria-checked="false">
+                    <span>{{ q.quality }}</span><small>{{ q.count }} sumber</small>
+                  </button>
+                  {% endif %}
+                  {% endfor %}
+                  {% if available_qualities == 0 %}<p class="player-settings-empty">Sumber kualitas belum tersedia.</p>{% endif %}
+                </div>
+              </section>
+              <section class="player-settings-section">
+                <h3>Kecepatan pemutaran</h3>
+                <div class="player-speed-options" id="player-speed-options" aria-label="Kecepatan pemutaran">
+                  <button type="button" data-playback-rate="0.5">0.5×</button>
+                  <button type="button" data-playback-rate="0.75">0.75×</button>
+                  <button type="button" data-playback-rate="1">Normal</button>
+                  <button type="button" data-playback-rate="1.25">1.25×</button>
+                  <button type="button" data-playback-rate="1.5">1.5×</button>
+                  <button type="button" data-playback-rate="2">2×</button>
+                </div>
+              </section>
+              <section class="player-settings-section player-boost-setting">
+                <label for="player-audio-boost"><span><svg class="icon" aria-hidden="true"><use href="#i-boost"/></svg> Penguat suara</span><output id="player-audio-boost-value">100%</output></label>
+                <input id="player-audio-boost" type="range" min="100" max="200" step="5" value="100" aria-label="Penguat suara 100 hingga 200 persen">
+              </section>
+              <section class="player-settings-section player-auto-settings">
+                <h3>Setelah episode</h3>
+                <label class="player-toggle-setting" for="player-auto-replay">
+                  <span>Putar ulang otomatis</span>
+                  <input id="player-auto-replay" type="checkbox">
+                </label>
+                {% if next_url %}
+                <label class="player-toggle-setting" for="player-auto-continue">
+                  <span>Lanjut otomatis ke episode berikutnya</span>
+                  <input id="player-auto-continue" type="checkbox">
+                </label>
+                {% endif %}
+              </section>
+              <button class="player-report-button" id="player-report" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#i-report"/></svg> Laporkan masalah pemutaran
+              </button>
+            </div>
+          </div>
+          <button class="player-btn" id="player-fullscreen" type="button" aria-label="Layar penuh">
+            <svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg>
+          </button>
+        </div>
+      </div>
     </div>
 
     {% if available_qualities == 0 %}
@@ -66,7 +157,7 @@
     <div class="watch-head">
       <div class="watch-copy">
         <span class="eyebrow">Episode {{ episode.episode_number }}</span>
-        <h1>{% if series %}<a href="/anime/{{ series.slug|urlencode }}">{{ episode.series_title }}</a>{% else %}{{ episode.series_title }}{% endif %}</h1>
+        <h1>{{ episode.series_title }}</h1>
         <div class="watch-meta">
           {% if series and series.score %}<span class="hero-rating"><svg class="icon fill" aria-hidden="true"><use href="#i-star-fill"/></svg>{{ series.score }}</span>{% endif %}
           {% if series and series.status %}<span class="status-pill{{ ' is-live' if series.status == 'Ongoing' else '' }}"><span class="dot"></span>{{ series.status }}</span>{% endif %}
@@ -118,28 +209,29 @@
       <div class="section-head">
         <h2 class="section-title">Unduhan</h2>
       </div>
-      {% if episode.downloads|length > 0 %}
+      {% if available_qualities > 0 %}
       <div class="download-list" id="episode-download-list">
-        {% for item in episode.downloads %}
+        {% for item in episode.qualities %}
+        {% if item.available %}
         <div class="download-row" data-download-item>
           <span class="download-icon"><svg class="icon"><use href="#i-download"/></svg></span>
           <span class="download-info"><strong>{{ item.server }}</strong><span>{{ item.quality }}</span></span>
-          <a class="btn btn-ghost btn-sm" href="{{ item.url }}" target="_blank" rel="noopener noreferrer nofollow">Unduh</a>
-          <button class="icon-button" type="button" aria-label="Simpan tautan"
-            data-save-download
+          <button class="btn btn-gold btn-sm" type="button" data-device-download
             data-title="{{ episode.series_title }} · Episode {{ episode.episode_number }}"
             data-server="{{ item.server }}"
             data-quality="{{ item.quality }}"
-            data-url="{{ item.url }}"
-            data-image="{{ episode.series_image }}">
-            <svg class="icon"><use href="#i-bookmark"/></svg>
+            data-source-url="{{ item.url }}"
+            data-episode-slug="{{ episode.slug }}">
+            <svg class="icon"><use href="#i-download"/></svg> Simpan ke HP
           </button>
+          <span class="download-row-status" data-device-download-status aria-live="polite"></span>
         </div>
+        {% endif %}
         {% endfor %}
       </div>
       <button class="download-more-button" id="download-more-button" type="button" aria-expanded="false" hidden>Tampilkan semua tautan</button>
       {% else %}
-      <p class="muted">Belum ada tautan unduhan untuk episode ini.</p>
+      <p class="muted">Belum ada video langsung yang bisa disimpan ke perangkat untuk episode ini.</p>
       {% endif %}
     </section>
 
@@ -150,8 +242,8 @@
       </div>
       <p class="comment-gate" id="comment-gate">Masuk dengan Google lewat halaman <a href="/akun">Akun</a> untuk menulis komentar.</p>
       <p class="comment-cloud-status" id="comments-cloud-status" aria-live="polite"></p>
-      <form class="comment-form" id="comment-form" hidden>
-        <input id="comment-input" name="comment" maxlength="400" placeholder="Tulis komentar untuk episode ini..." required>
+      <form class="comment-form" id="comment-form" autocomplete="off" hidden>
+        <input id="comment-input" name="comment" type="text" autocomplete="off" maxlength="400" placeholder="Tulis komentar untuk episode ini..." required>
         <button class="btn btn-gold btn-sm" type="submit">Kirim</button>
       </form>
       <div class="comment-list" id="comment-list"></div>
